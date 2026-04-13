@@ -1,7 +1,7 @@
 {
   "name": "solto",
   "version": "1.0.0",
-  "description": "Linear-triggered coding-agent orchestrator (Claude Code / Codex). Listens for labeled Linear issues, runs an agent in a git worktree, opens a PR.",
+  "description": "Linear-triggered coding-agent orchestrator (Claude Code / Codex). Listens for bot-assigned Linear issues, runs an agent in a git worktree, opens a PR.",
   "scripts": {
     "start": "tsx --env-file=.env src/server.ts",
     "prune": "bash scripts/prune.sh"

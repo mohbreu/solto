@@ -100,7 +100,8 @@ Next steps (as the 'agent' user):
       ./scripts/add-project.sh "$id"
   done
   # Set up the Cloudflare Tunnel for public HTTPS (see SETUP.md § Cloudflare Tunnel)
-  # Create a Linear webhook per project, paste each <ID>_LINEAR_SECRET into .env
+  # Create a Linear webhook per project, paste each <ID>_LINEAR_SECRET into .env,
+  # and use a dedicated bot user such as solto-bot for LINEAR_API_KEY
   pm2 start ecosystem.config.cjs
   pm2 save
   # Run `pm2 startup` FROM YOUR SUDO-CAPABLE USER (not agent) for boot persistence

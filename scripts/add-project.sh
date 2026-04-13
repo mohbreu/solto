@@ -77,6 +77,7 @@ Next steps for '$id':
        Resource types: Issues + Comments
      Copy the signing secret.
   2. Paste it into .env as: ${env_key}=<secret>
-  3. Create the 'agent' label in Linear (and optionally 'yolo').
+  3. Assign work to your bot user when the issue is in Todo / To do.
+     Optional: add the 'yolo' label to push directly to the base branch.
   4. pm2 restart solto
 EOF

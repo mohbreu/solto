@@ -4,7 +4,8 @@ import crypto from "node:crypto";
 import { runAgent } from "./agent.js";
 import {
   getIssueById,
-  getIssueStateName,
+  getViewer,
+  getViewerId,
   postLinearComment,
   STATE_TODO,
   type LinearComment,
@@ -24,8 +25,6 @@ const DAY_MS = 24 * HOUR_MS;
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const ISSUE_ID_RE = /^[a-zA-Z0-9-]{1,64}$/;
 const ISSUE_IDENTIFIER_RE = /^[A-Z0-9]+-[0-9]+$/;
-const COMMENT_COMMAND_RE = /^\/agent(?:\s+([\s\S]*))?$/i;
-
 function normalizeStateName(name: string): string {
   return name.toLowerCase().replace(/\s+/g, "");
 }
@@ -36,14 +35,122 @@ function isTodoStateName(name: string | null | undefined): boolean {
   return normalized === normalizeStateName(STATE_TODO) || normalized === "todo";
 }
 
-function parseAgentCommentCommand(body: string): string | null {
-  const match = body.trim().match(COMMENT_COMMAND_RE);
-  if (!match) return null;
-  return match[1]?.trim() || "Address the latest feedback on the existing PR.";
+function buildBotMentionAliases(name: string): string[] {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, " ");
+  const aliases = new Set<string>([
+    normalized,
+    normalized.replace(/\s+/g, "-"),
+    normalized.replace(/\s+/g, "_"),
+  ]);
+
+  const configured = process.env.LINEAR_BOT_MENTION?.trim().toLowerCase();
+  if (configured) aliases.add(configured.replace(/^@/, ""));
+
+  return [...aliases];
+}
+
+function parseBotMentionComment(body: string, aliases: string[]): string | null {
+  const trimmed = body.trim();
+  for (const alias of aliases) {
+    const prefix = `@${alias}`;
+    if (!trimmed.toLowerCase().startsWith(prefix)) continue;
+
+    const remainder = trimmed.slice(prefix.length).trim();
+    return remainder || "Address the latest feedback on the existing PR.";
+  }
+
+  return null;
 }
 
 function issueIsValid(issue: LinearIssue): boolean {
   return ISSUE_ID_RE.test(issue.id) && ISSUE_IDENTIFIER_RE.test(issue.identifier);
+}
+
+function getPreviousAssigneeId(updatedFrom: unknown): string | null {
+  if (!updatedFrom || typeof updatedFrom !== "object") return null;
+
+  const record = updatedFrom as {
+    assigneeId?: unknown;
+    assignee?: { id?: unknown } | null;
+  };
+
+  if (typeof record.assigneeId === "string") {
+    return record.assigneeId;
+  }
+  if (record.assignee && typeof record.assignee.id === "string") {
+    return record.assignee.id;
+  }
+  return null;
+}
+
+function updateTouchedAssigneeOrState(updatedFrom: unknown): boolean {
+  if (!updatedFrom || typeof updatedFrom !== "object") return false;
+
+  const record = updatedFrom as {
+    assigneeId?: unknown;
+    assignee?: unknown;
+    stateId?: unknown;
+    state?: unknown;
+  };
+
+  return (
+    Object.hasOwn(record, "assigneeId")
+    || Object.hasOwn(record, "assignee")
+    || Object.hasOwn(record, "stateId")
+    || Object.hasOwn(record, "state")
+  );
+}
+
+async function getAssignmentTriggerIssue(
+  projectId: string,
+  issueId: string,
+  action: string,
+  updatedFrom: unknown
+): Promise<{ issue: LinearIssue | null; reason?: string }> {
+  const issue = await getIssueById(issueId).catch((err) => {
+    console.error(
+      `[webhook] failed to fetch issue details for ${projectId}/${issueId}:`,
+      err
+    );
+    return null;
+  });
+  if (!issue) {
+    return { issue: null, reason: `issue lookup failed for ${issueId}` };
+  }
+
+  const viewerId = await getViewerId().catch((err) => {
+    console.error(`[webhook] failed to fetch Linear viewer id for ${projectId}:`, err);
+    return null;
+  });
+  if (!viewerId) {
+    return { issue: null, reason: "unable to resolve bot user" };
+  }
+
+  if (issue.assigneeId !== viewerId) {
+    return { issue: null, reason: "issue is not assigned to the bot user" };
+  }
+
+  if (!isTodoStateName(issue.stateName)) {
+    return { issue: null, reason: `state is not todo: ${issue.stateName ?? "unknown"}` };
+  }
+
+  if (action === "create") {
+    return { issue };
+  }
+
+  if (action === "update") {
+    const prevAssigneeId = getPreviousAssigneeId(updatedFrom);
+    const touchedAssigneeOrState = updateTouchedAssigneeOrState(updatedFrom);
+    if (!touchedAssigneeOrState) {
+      return { issue: null, reason: "assignee/state did not change in this event" };
+    }
+    if (prevAssigneeId === viewerId && !Object.hasOwn(updatedFrom as object, "stateId")) {
+      return { issue: null, reason: "issue was already assigned to the bot user" };
+    }
+    return { issue };
+  }
+
+  return { issue: null, reason: `action=${action}` };
 }
 
 function tokensMatch(provided: string | undefined, expected: string): boolean {
@@ -144,45 +251,26 @@ app.post("/webhook/:projectId", async (c) => {
   if (webhookType === "Issue") {
     const labels = (data?.labels ?? []) as { id: string; name: string }[];
     const labelNames = labels.map((l) => l.name);
-    const issue = data as LinearIssue;
+    const issueFromWebhook = data as LinearIssue;
     console.log(
       `[webhook] ${projectId} type=${webhookType} action=${action} issue=${data?.id} labels=[${labelNames.join(",")}]`
     );
 
-    if (!issueIsValid(issue)) {
-      console.log(`[webhook] rejected malformed issue id/identifier: ${issue.id}/${issue.identifier}`);
+    if (!issueIsValid(issueFromWebhook)) {
+      console.log(
+        `[webhook] rejected malformed issue id/identifier: ${issueFromWebhook.id}/${issueFromWebhook.identifier}`
+      );
       return c.text("Bad Request", 400);
     }
 
-    const agentLabel = labels.find((l) => l.name === "agent");
-    if (!agentLabel) {
-      console.log(`[webhook] ignored (no agent label)`);
-      return c.text("OK");
-    }
-
-    if (action === "create") {
-      const stateName = await getIssueStateName(issue.id).catch((err) => {
-        console.error(`[webhook] failed to fetch issue state for ${projectId}/${issue.id}:`, err);
-        return null;
-      });
-      if (!isTodoStateName(stateName)) {
-        console.log(
-          `[webhook] ignored (action=create but state is not todo: ${stateName ?? "unknown"})`
-        );
-        return c.text("OK");
-      }
-    } else if (action === "update") {
-      const prevLabelIds = updatedFrom?.labelIds as string[] | undefined;
-      if (prevLabelIds === undefined) {
-        console.log(`[webhook] ignored (labels did not change in this event)`);
-        return c.text("OK");
-      }
-      if (prevLabelIds.includes(agentLabel.id)) {
-        console.log(`[webhook] ignored (agent label was already present)`);
-        return c.text("OK");
-      }
-    } else {
-      console.log(`[webhook] ignored (action=${action})`);
+    const { issue, reason } = await getAssignmentTriggerIssue(
+      projectId,
+      issueFromWebhook.id,
+      action,
+      updatedFrom
+    );
+    if (!issue) {
+      console.log(`[webhook] ignored (${reason ?? "not eligible"})`);
       return c.text("OK");
     }
 
@@ -202,7 +290,6 @@ app.post("/webhook/:projectId", async (c) => {
   if (webhookType === "Comment") {
     const comment = data as LinearComment;
     const issueId = comment.issueId;
-    const instruction = parseAgentCommentCommand(comment.body ?? "");
     console.log(
       `[webhook] ${projectId} type=${webhookType} action=${action} issue=${issueId} comment=${comment.id}`
     );
@@ -211,8 +298,20 @@ app.post("/webhook/:projectId", async (c) => {
       console.log(`[webhook] ignored comment (action=${action})`);
       return c.text("OK");
     }
+    const viewer = await getViewer().catch((err) => {
+      console.error(`[webhook] failed to fetch Linear viewer for ${projectId}:`, err);
+      return null;
+    });
+    if (!viewer) {
+      console.log("[webhook] ignored comment (unable to resolve bot user)");
+      return c.text("OK");
+    }
+    const instruction = parseBotMentionComment(
+      comment.body ?? "",
+      buildBotMentionAliases(viewer.name)
+    );
     if (!instruction) {
-      console.log("[webhook] ignored comment (no /agent command)");
+      console.log("[webhook] ignored comment (no bot mention command)");
       return c.text("OK");
     }
 

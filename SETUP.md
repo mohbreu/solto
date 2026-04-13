@@ -2,7 +2,7 @@
 
 Reference for installing and operating solto on your own Linux host. Paths assume Ubuntu 24.04 on the `agent` user, but anything Linux + [systemd](https://systemd.io/) / [pm2](https://pm2.keymetrics.io/) should work.
 
-> **Before installing, read [README.md § Trust model](./README.md#-trust-model-read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can add the `agent` label to a Linear issue has what is effectively shell access to your host.
+> **Before installing, read [README.md § Trust model](./README.md#-trust-model-read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can assign an issue to the bot user has what is effectively shell access to your host.
 
 ## Host dependencies: what solto needs to run
 
@@ -68,8 +68,8 @@ Minimum contents for the agent to do good work:
 
 ### Linear setup (per project)
 
-1. **`agent` label** (required trigger). Adding this to an issue fires the webhook and runs solto.
-2. **`yolo` label** (optional). If present alongside `agent`, solto pushes directly to the base branch instead of opening a PR.
+1. **Dedicated bot user** (required trigger). Best practice: use the same Linear user that owns `LINEAR_API_KEY`, for example `solto-bot`.
+2. **`yolo` label** (optional). If present, solto pushes directly to the base branch instead of opening a PR.
 3. **Conventional-commit type labels** (optional). solto picks up `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `style`, `perf`, `build`, `ci`, `revert`, or any `type:<x>` label, and uses it as the commit/PR type. Defaults to `chore`.
 4. **Webhook**. URL `https://<your-host>/webhook/<project-id>`, resource types `Issues` and `Comments`, scoped to the team that owns the project. Paste the signing secret into `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE, dashes to underscores).
 
@@ -99,7 +99,7 @@ Vague issues produce vague diffs. In some cases the agent comments "made no chan
     prune.sh               # cleans stale worktrees + merged branches
   repos/<project>/         # full clone of each repo (one per project)
   workers/<project>/<id>/  # ephemeral git worktrees, one per active job
-  .solto-state/prs/        # local PR metadata so /agent comments can update an existing PR branch
+  .solto-state/prs/        # local PR metadata so bot-mention comments can update an existing PR branch
 ~/.cloudflared/
   cert.pem                 # cloudflared account cert (from `tunnel login`)
   <UUID>.json              # tunnel credentials
@@ -191,9 +191,10 @@ For each project in `projects.local.json`:
    - Resource types: **Issues** and **Comments**
    - Team: the team that owns the project
    - Copy the signing secret → `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE form of the id).
-3. **Labels** (per workspace):
-   - `agent`: required trigger, runs the agent
-   - `yolo`: optional, pushes directly to `main` instead of opening a PR
+3. **Workflow setup**:
+   - assign work to your bot user, for example `solto-bot`
+   - keep issues in `Todo` / `To do` when you want them to start
+   - `yolo` is optional and pushes directly to `main` instead of opening a PR
 
 ### 6. Start solto
 
@@ -219,6 +220,7 @@ curl https://<your-webhook-host>/health                 # → ok (via tunnel)
 | `ANTHROPIC_API_KEY` | Headless Claude Code CLI (when `CODER=claude`) |
 | `OPENAI_API_KEY` | Codex CLI (when `CODER=codex`). Leave empty to use `codex login` session |
 | `LINEAR_API_KEY` | Linear personal API key for comments + state updates |
+| `LINEAR_BOT_MENTION` | Optional override for the bot mention alias used in follow-up comments |
 | `<PROJECT>_LINEAR_SECRET` | Webhook signing secret per project (e.g. `MY_PROJECT_LINEAR_SECRET`) |
 | `STATUS_TOKEN` | Random token gating the `/status` endpoint |
 | `TUNNEL_NAME` | Optional override for the cloudflared tunnel name |
@@ -237,7 +239,12 @@ pm2 restart solto
 
 ## Triggering an agent
 
-Add the `agent` label to a Linear issue. The webhook fires, solto:
+Get the issue into this state:
+
+- assigned to the bot user
+- in `Todo` / `To do`
+
+The order does not matter. Once an update leaves the issue in that state, the webhook fires and solto:
 
 1. Posts a comment, sets state → **In Progress**
 2. Adds a git worktree off `origin/main`
@@ -248,7 +255,7 @@ Add the `agent` label to a Linear issue. The webhook fires, solto:
 
 If `yolo` is also present: pushes directly to `main`, sets state → **Done**. On failure / no-changes: comments the error, sets state → **Todo**.
 
-To iterate on an open PR, add a new Linear comment that starts with `/agent`. solto reuses the existing PR branch, makes another commit, pushes it to the same branch, and comments back with the updated PR URL.
+To iterate on an open PR, add a new Linear comment that starts with the bot mention, usually `@solto-bot`. solto reuses the existing PR branch, makes another commit, pushes it to the same branch, and comments back with the updated PR URL. If your workspace uses a different mention alias than the bot display name suggests, set `LINEAR_BOT_MENTION` in `.env`.
 
 ## Repo conventions for agents
 
@@ -309,7 +316,7 @@ ls ~/solto/workers/<project>/
 git -C ~/solto/workers/<project>/<issue-id>/ status
 ```
 
-In Linear: every issue with the `agent` label self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
+In Linear: every issue assigned to the bot user self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
 
 ### Health probes
 

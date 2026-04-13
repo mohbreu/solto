@@ -6,12 +6,19 @@ export interface LinearIssue {
   title: string;
   description: string;
   teamId: string;
+  stateName: string | null;
+  assigneeId: string | null;
 }
 
 export interface LinearComment {
   id: string;
   body: string;
   issueId: string;
+}
+
+export interface LinearViewer {
+  id: string;
+  name: string;
 }
 
 export const STATE_IN_PROGRESS = "In Progress";
@@ -68,20 +75,6 @@ export async function postLinearComment(
   );
 }
 
-export async function getIssueStateName(
-  issueId: string
-): Promise<string | null> {
-  const data = await linearGraphQL<{
-    issue: { state: { name: string } | null } | null;
-  }>(
-    `query IssueState($id: String!) {
-      issue(id: $id) { state { name } }
-    }`,
-    { id: issueId }
-  );
-  return data.issue?.state?.name ?? null;
-}
-
 export async function getIssueById(
   issueId: string
 ): Promise<LinearIssue | null> {
@@ -93,6 +86,8 @@ export async function getIssueById(
           title: string;
           description: string | null;
           team: { id: string };
+          state: { name: string } | null;
+          assignee: { id: string } | null;
         }
       | null;
   }>(
@@ -103,6 +98,8 @@ export async function getIssueById(
         title
         description
         team { id }
+        state { name }
+        assignee { id }
       }
     }`,
     { id: issueId }
@@ -114,7 +111,41 @@ export async function getIssueById(
     title: data.issue.title,
     description: data.issue.description ?? "",
     teamId: data.issue.team.id,
+    stateName: data.issue.state?.name ?? null,
+    assigneeId: data.issue.assignee?.id ?? null,
   };
+}
+
+let viewerPromise: Promise<LinearViewer | null> | null = null;
+
+export async function getViewer(): Promise<LinearViewer | null> {
+  if (!viewerPromise) {
+    viewerPromise = linearGraphQL<{
+      viewer: { id: string; name: string } | null;
+    }>(
+      `query Viewer {
+        viewer { id name }
+      }`,
+      {}
+    )
+      .then((data) => {
+        if (!data.viewer) return null;
+        return {
+          id: data.viewer.id,
+          name: data.viewer.name,
+        };
+      })
+      .catch((err) => {
+        viewerPromise = null;
+        throw err;
+      });
+  }
+
+  return await viewerPromise;
+}
+
+export async function getViewerId(): Promise<string | null> {
+  return (await getViewer())?.id ?? null;
 }
 
 const stateCache = new Map<string, Map<string, string>>();
