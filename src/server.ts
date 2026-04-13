@@ -14,6 +14,11 @@ import {
 } from "./linear.js";
 import { getPullRequestState } from "./pr-state.js";
 import { PROJECTS } from "./projects.js";
+import {
+  listRecentJobStates,
+  markAllRunningJobsInterrupted,
+  saveJobState,
+} from "./run-state.js";
 
 const CONVENTIONAL_TYPES = new Set([
   "feat", "fix", "chore", "docs", "refactor",
@@ -186,36 +191,6 @@ function checkLimits(projectId: string): string | null {
   return null;
 }
 
-app.get("/status", (c) => {
-  if (!tokensMatch(c.req.header("x-status-token"), process.env.STATUS_TOKEN ?? "")) {
-    return c.text("Unauthorized", 401);
-  }
-
-  const now = Date.now();
-  const status = Object.fromEntries(
-    [...pools.entries()].map(([projectId, workers]) => {
-      const list = history.get(projectId)!;
-      const lastHour = list.filter((t) => t > now - HOUR_MS).length;
-      const lastDay = list.filter((t) => t > now - DAY_MS).length;
-      const project = PROJECTS[projectId];
-      return [
-        projectId,
-        {
-          active: workers.size,
-          max: project.maxParallel,
-          jobs: [...workers.keys()],
-          runs: {
-            lastHour: `${lastHour}/${project.maxPerHour}`,
-            lastDay: `${lastDay}/${project.maxPerDay}`,
-          },
-        },
-      ];
-    })
-  );
-
-  return c.json(status);
-});
-
 app.get("/health", (c) => c.text("ok"));
 
 app.post("/webhook/:projectId", async (c) => {
@@ -379,6 +354,18 @@ async function acceptRun(
   }
 
   history.get(projectId)!.push(Date.now());
+  const nowIso = new Date().toISOString();
+  await saveJobState({
+    issueId: issue.id,
+    projectId,
+    title: issue.title,
+    mode: opts.direct ? "direct" : opts.existingPr ? "iteration" : "pr",
+    status: "running",
+    phase: "accepted",
+    startedAt: nowIso,
+    updatedAt: nowIso,
+    prUrl: opts.existingPr?.prUrl,
+  }).catch(() => {});
 
   const worker = runAgent(issue, project, {
     direct: opts.direct,
@@ -396,11 +383,51 @@ async function acceptRun(
   return new Response("Accepted", { status: 202 });
 }
 
-serve({ fetch: app.fetch, port: 3000 }, () => {
-  console.log("solto running on :3000");
-  Object.keys(PROJECTS).forEach((id) => {
-    console.log(`  POST /webhook/${id}`);
+app.get("/status", async (c) => {
+  if (!tokensMatch(c.req.header("x-status-token"), process.env.STATUS_TOKEN ?? "")) {
+    return c.text("Unauthorized", 401);
+  }
+
+  const now = Date.now();
+  const recentJobs = await listRecentJobStates(12);
+  const status = Object.fromEntries(
+    [...pools.entries()].map(([projectId, workers]) => {
+      const list = history.get(projectId)!;
+      const lastHour = list.filter((t) => t > now - HOUR_MS).length;
+      const lastDay = list.filter((t) => t > now - DAY_MS).length;
+      const project = PROJECTS[projectId];
+      return [
+        projectId,
+        {
+          active: workers.size,
+          max: project.maxParallel,
+          jobs: [...workers.keys()],
+          runs: {
+            lastHour: `${lastHour}/${project.maxPerHour}`,
+            lastDay: `${lastDay}/${project.maxPerDay}`,
+          },
+        },
+      ];
+    })
+  );
+
+  return c.json({
+    ...status,
+    _recent: recentJobs,
   });
-  console.log("  GET  /status  (x-status-token header required)");
-  console.log("  GET  /health");
 });
+
+async function main(): Promise<void> {
+  await markAllRunningJobsInterrupted();
+
+  serve({ fetch: app.fetch, port: 3000 }, () => {
+    console.log("solto running on :3000");
+    Object.keys(PROJECTS).forEach((id) => {
+      console.log(`  POST /webhook/${id}`);
+    });
+    console.log("  GET  /status  (x-status-token header required)");
+    console.log("  GET  /health");
+  });
+}
+
+void main();

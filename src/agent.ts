@@ -15,6 +15,7 @@ import {
   type PullRequestState,
 } from "./pr-state.js";
 import type { ProjectConfig } from "./projects.js";
+import { getJobState, saveJobState } from "./run-state.js";
 import { CODER_DISPLAY_NAMES, runCoder } from "./runners.js";
 
 interface RunAgentOptions {
@@ -36,6 +37,9 @@ export async function runAgent(
   const worktree = `${project.workersPath}/${issue.id}`;
   const prFile = `/tmp/solto-pr-${issue.id}.md`;
   const isIteration = Boolean(opts.existingPr);
+  const initialRunState = await getJobState(issue.id).catch(() => null);
+  const startedAt = initialRunState?.startedAt ?? new Date().toISOString();
+  const mode = opts.direct ? "direct" : isIteration ? "iteration" : "pr";
 
   console.log(`[${project.id}/${issue.id}] Starting: ${issue.title}`);
 
@@ -50,6 +54,18 @@ export async function runAgent(
 
     await mkdir(project.workersPath, { recursive: true });
     await prepareWorktree(project, worktree, branch, base, isIteration);
+
+    await saveJobState({
+      issueId: issue.id,
+      projectId: project.id,
+      title: issue.title,
+      mode,
+      status: "running",
+      phase: "workspace_ready",
+      startedAt,
+      updatedAt: new Date().toISOString(),
+      prUrl: opts.existingPr?.prUrl,
+    });
 
     await postLinearComment(issue.id, "Workspace ready. Running agent.");
     const coder = await runCoder(
@@ -68,6 +84,19 @@ export async function runAgent(
     const hasChanges = diff.trim().length > 0;
 
     if (!hasChanges) {
+      const now = new Date().toISOString();
+      await saveJobState({
+        issueId: issue.id,
+        projectId: project.id,
+        title: issue.title,
+        mode,
+        status: "no_changes",
+        phase: "finished",
+        startedAt,
+        updatedAt: now,
+        finishedAt: now,
+        prUrl: opts.existingPr?.prUrl,
+      });
       await postLinearComment(
         issue.id,
         "Agent finished but made no changes. The task may already be complete or the description needs more detail."
@@ -97,6 +126,18 @@ export async function runAgent(
         "push", "origin", `HEAD:${base}`,
       ]);
 
+      const now = new Date().toISOString();
+      await saveJobState({
+        issueId: issue.id,
+        projectId: project.id,
+        title: issue.title,
+        mode: "direct",
+        status: "direct",
+        phase: "finished",
+        startedAt,
+        updatedAt: now,
+        finishedAt: now,
+      });
       await postLinearComment(
         issue.id,
         `Done. Pushed directly to ${base} (yolo).\n\n${diff.trim()}`
@@ -120,6 +161,19 @@ export async function runAgent(
         projectId: project.id,
         branch,
         base,
+        prUrl,
+      });
+      const now = new Date().toISOString();
+      await saveJobState({
+        issueId: issue.id,
+        projectId: project.id,
+        title: issue.title,
+        mode: "iteration",
+        status: "succeeded",
+        phase: "finished",
+        startedAt,
+        updatedAt: now,
+        finishedAt: now,
         prUrl,
       });
       await postLinearComment(
@@ -159,6 +213,19 @@ export async function runAgent(
       prUrl,
     });
 
+    const now = new Date().toISOString();
+    await saveJobState({
+      issueId: issue.id,
+      projectId: project.id,
+      title: issue.title,
+      mode: "pr",
+      status: "succeeded",
+      phase: "finished",
+      startedAt,
+      updatedAt: now,
+      finishedAt: now,
+      prUrl,
+    });
     await postLinearComment(
       issue.id,
       `Done. PR opened: ${prUrl}\n\n${diff.trim()}`
@@ -168,6 +235,21 @@ export async function runAgent(
     console.log(`[${project.id}/${issue.id}] Done - PR: ${prUrl}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const now = new Date().toISOString();
+
+    await saveJobState({
+      issueId: issue.id,
+      projectId: project.id,
+      title: issue.title,
+      mode,
+      status: "failed",
+      phase: "failed",
+      startedAt,
+      updatedAt: now,
+      finishedAt: now,
+      prUrl: opts.existingPr?.prUrl,
+      error: message,
+    }).catch(() => {});
 
     await postLinearComment(issue.id, `Agent failed.\n\n${message}`).catch(() => {});
     await setIssueState(
