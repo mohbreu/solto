@@ -14,6 +14,13 @@ An issue can trigger solto in either of these ways:
 - create the issue in `Todo` / `To do` with the `agent` label already applied
 - add the `agent` label later on an existing issue
 
+Commit and branch naming are driven by Linear labels:
+
+- `type:feat`, `type:fix`, `type:docs`, `type:chore`, etc. set the Conventional Commit type solto uses
+- bare labels like `feat`, `fix`, `docs`, and `chore` also work
+- that type is used for both the branch name and the fallback commit message, for example `docs/MOBILE-123-update-readme` and `docs: Update README`
+- if no type label is present, solto defaults to `chore`
+
 Add the `yolo` label alongside `agent` to push directly to `main` instead of opening a PR.
 
 ## ⚠ Trust model — read before deploying
