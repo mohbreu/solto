@@ -5,10 +5,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
 #
 # What this does:
-#   - creates the 'agent' user (passwordless sudo)
-#   - installs git, curl, ca-certificates, jq, nginx, gh
-#   - as 'agent': installs Claude Code, mise, Node LTS, pnpm, pm2, and both
-#     Claude Code and Codex CLIs
+#   - creates the 'agent' user (no sudo — intentional)
+#   - installs git, curl, ca-certificates, jq, gh
+#   - as 'agent': installs mise, Node LTS, pnpm, pm2, cloudflared, and both
+#     the Claude Code and Codex CLIs
 #
 # After this finishes, log in as the 'agent' user and follow SETUP.md to clone
 # the solto repo and configure projects.
@@ -29,7 +29,7 @@ fi
 
 echo "--- Installing system packages"
 apt-get update -q
-apt-get install -y git curl ca-certificates jq nginx
+apt-get install -y git curl ca-certificates jq
 
 echo "--- Installing GitHub CLI"
 if ! command -v gh >/dev/null 2>&1; then
@@ -67,13 +67,20 @@ mise use --global npm:pnpm npm:pm2
 echo "--- Installing Codex CLI"
 npm i -g @openai/codex
 
+echo "--- Installing cloudflared"
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+    -o ~/.local/bin/cloudflared
+chmod +x ~/.local/bin/cloudflared
+
 echo ""
 echo "--- Agent user setup complete"
-echo "    claude: $(claude --version 2>/dev/null || echo 'not on PATH yet — reopen shell')"
-echo "    codex:  $(codex --version 2>/dev/null || echo 'not on PATH yet — reopen shell')"
-echo "    node:   $(node --version)"
-echo "    pnpm:   $(pnpm --version)"
-echo "    pm2:    $(pm2 --version)"
+echo "    claude:      $(claude --version 2>/dev/null || echo 'not on PATH yet — reopen shell')"
+echo "    codex:       $(codex --version 2>/dev/null || echo 'not on PATH yet — reopen shell')"
+echo "    cloudflared: $(cloudflared --version 2>/dev/null | head -1 || echo 'not on PATH yet — reopen shell')"
+echo "    node:        $(node --version)"
+echo "    pnpm:        $(pnpm --version)"
+echo "    pm2:         $(pm2 --version)"
 AGENT_SETUP
 
 cat <<'EOF'
@@ -92,9 +99,9 @@ Next steps (as the 'agent' user):
   for id in $(jq -r '.[].id' projects.local.json); do
       ./scripts/add-project.sh "$id"
   done
+  # Set up the Cloudflare Tunnel for public HTTPS (see SETUP.md § Cloudflare Tunnel)
   # Create a Linear webhook per project, paste each <ID>_LINEAR_SECRET into .env
-  # Set up a Cloudflare Tunnel (see SETUP.md) for public HTTPS
   pm2 start ecosystem.config.cjs
   pm2 save
-  pm2 startup   # follow printed sudo command for boot persistence
+  # Run `pm2 startup` FROM YOUR SUDO-CAPABLE USER (not agent) for boot persistence
 EOF

@@ -1,6 +1,6 @@
 # solto — Setup & Operations
 
-Reference for installing and operating solto on your own Linux host. Paths assume Ubuntu 24.04 on the `agent` user, but anything Linux + systemd/pm2 should work.
+Reference for installing and operating solto on your own Linux host. Paths assume Ubuntu 24.04 on the `agent` user, but anything Linux + [systemd](https://systemd.io/) / [pm2](https://pm2.keymetrics.io/) should work.
 
 > **Before installing, read [README.md § Trust model](./README.md#-trust-model--read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can add the `agent` label to a Linear issue has what is effectively shell access to your host.
 
@@ -8,49 +8,38 @@ Reference for installing and operating solto on your own Linux host. Paths assum
 
 `scripts/bootstrap.sh` installs all of these on a fresh Ubuntu box. If you're installing by hand, here's the full list.
 
+solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS. It's free, needs no firewall changes, gives you automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). If you'd rather use something else ([nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/), [ngrok](https://ngrok.com/)), swap it in — solto only cares that something forwards HTTPS to `localhost:3000`.
+
 ### System packages (apt)
 
 | Package | Purpose |
 |---|---|
-| `git` | solto clones target repos, creates worktrees, commits, pushes |
+| [`git`](https://git-scm.com/) | solto clones target repos, creates worktrees, commits, pushes |
 | `curl`, `ca-certificates` | Fetching installers / TLS |
-| `gh` | Used inside agent runs for `gh pr create` and by `add-project.sh` for `gh repo clone`. **Must be authenticated** (`gh auth login`) as the `agent` user with push + PR-create permission on every target repo |
-| `jq` | `add-project.sh` parses `projects.local.json` |
-| `nginx` | Optional — only if you want local HTTP routing; not required if you use Cloudflare Tunnel directly |
+| [`gh`](https://cli.github.com/) | Used inside agent runs for `gh pr create` and by `add-project.sh` for `gh repo clone`. **Must be authenticated** (`gh auth login`) as the `agent` user with push + PR-create permission on every target repo |
+| [`jq`](https://jqlang.org/) | `add-project.sh` parses `projects.local.json` |
 
 ### Per-user (installed under `~agent`)
 
 | Tool | Why |
 |---|---|
-| **mise** | Version manager — pins Node LTS and owns the pnpm/pm2 installs |
-| **Node LTS** | solto is Node + Hono |
-| **pnpm** | Package manager (the repo's `packageManager` field pins it) |
-| **pm2** | Process supervisor for `solto` and `cloudflare-tunnel` |
-| **Claude Code CLI** (`~/.local/bin/claude`) | Headless agent runtime when `CODER=claude` |
-| **Codex CLI** (global npm) | Headless agent runtime when `CODER=codex` (default) |
-| **cloudflared** (`~/.local/bin/cloudflared`) | Cloudflare Tunnel for public HTTPS (recommended). Any other HTTPS terminator works if you prefer |
+| [**mise**](https://mise.jdx.dev/) | Version manager — pins Node LTS and owns the pnpm/pm2 installs |
+| [**Node LTS**](https://nodejs.org/) | solto is Node + [Hono](https://hono.dev/) |
+| [**pnpm**](https://pnpm.io/) | Package manager (the repo's `packageManager` field pins it) |
+| [**pm2**](https://pm2.keymetrics.io/) | Process supervisor for `solto` and `cloudflare-tunnel` |
+| [**Claude Code CLI**](https://docs.claude.com/en/docs/claude-code/overview) (`~/.local/bin/claude`) | Headless agent runtime when `CODER=claude` |
+| [**Codex CLI**](https://github.com/openai/codex) (global npm) | Headless agent runtime when `CODER=codex` (default) |
+| [**cloudflared**](https://github.com/cloudflare/cloudflared) (`~/.local/bin/cloudflared`) | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS |
 
 ### External accounts / credentials
 
 | Account | Used for |
 |---|---|
-| GitHub (for the `agent` user) | `gh auth login` — must have push + PR-create on target repos |
-| Linear workspace | Personal API key (`LINEAR_API_KEY`) + one webhook per project with its signing secret |
-| Anthropic API key *or* Claude Code subscription | If `CODER=claude` |
-| OpenAI API key *or* ChatGPT subscription (`codex login`) | If `CODER=codex` (default) |
-| A Cloudflare-managed domain | If using Cloudflare Tunnel for HTTPS |
-
-## Components (at a glance)
-
-| Component | Where | Purpose |
-|---|---|---|
-| solto (Node + Hono) | `~/solto/src/` | Receives Linear webhooks, runs a coding agent per issue, opens PRs |
-| Claude Code CLI | `~/.local/bin/claude` | Headless agent runtime (if `CODER=claude`) |
-| Codex CLI | global npm (`codex`) | Headless agent runtime (if `CODER=codex`, default) |
-| pnpm + Node | via mise | JS toolchain |
-| pm2 | global npm | Keeps solto + tunnel alive across reboots |
-| cloudflared | `~/.local/bin/cloudflared` | Public HTTPS for Linear webhooks |
-| gh CLI | system | Used inside the agent for `gh pr create` |
+| [GitHub](https://github.com/) (for the `agent` user) | `gh auth login` — must have push + PR-create on target repos |
+| [Linear](https://linear.app/) workspace | Personal API key (`LINEAR_API_KEY`) + one webhook per project with its signing secret |
+| [Anthropic API](https://console.anthropic.com/) key *or* [Claude subscription](https://www.anthropic.com/pricing#claude-code) | If `CODER=claude` |
+| [OpenAI API](https://platform.openai.com/) key *or* [ChatGPT subscription](https://openai.com/chatgpt/pricing/) (`codex login`) | If `CODER=codex` (default) |
+| A [Cloudflare](https://www.cloudflare.com/)-managed domain | For the Cloudflare Tunnel hostname |
 
 ## Target project requirements — what each repo needs to work with solto
 
@@ -124,7 +113,7 @@ On a fresh Ubuntu box:
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
 ```
 
-This creates the `agent` user and installs `git`, `gh`, Node LTS, pnpm, pm2, and both the Claude Code and Codex CLIs. On anything not Ubuntu, read the script and port it by hand.
+This creates the `agent` user (no sudo — intentional) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared`, and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
 
 ### 2. Clone and configure solto (as the `agent` user)
 
@@ -156,17 +145,11 @@ solto only forwards `OPENAI_API_KEY` if it's set, so leaving it empty defers to 
 
 Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
-### 4. Set up public HTTPS (Cloudflare Tunnel)
+### 4. Set up public HTTPS ([Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/))
 
-Linear requires HTTPS. A Cloudflare Tunnel is the easiest zero-firewall option if your domain is on Cloudflare.
+Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) — it's free, zero-firewall, automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
 
 ```bash
-# Install cloudflared (no sudo — single binary)
-mkdir -p ~/.local/bin
-curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-    -o ~/.local/bin/cloudflared
-chmod +x ~/.local/bin/cloudflared
-
 # Authenticate (opens a browser URL — pick your Cloudflare-managed domain)
 cloudflared tunnel login
 # → ~/.cloudflared/cert.pem
