@@ -316,6 +316,8 @@ ls ~/solto/workers/<project>/
 git -C ~/solto/workers/<project>/<issue-id>/ status
 ```
 
+`/status` returns the per-project live view plus a `_recent` array of the latest persisted jobs. That helps explain what happened if `solto` restarted and the in-memory active-job view was lost.
+
 In Linear: every issue assigned to the bot user self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
 
 ### Health probes
