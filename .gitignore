@@ -3,6 +3,7 @@ repos/
 workers/
 .env
 projects.local.json
+.solto-state/
 
 # OS / editor
 .DS_Store

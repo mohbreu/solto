@@ -74,7 +74,7 @@ cat <<EOF
 Next steps for '$id':
   1. In Linear, create a webhook at Settings → API → Webhooks:
        URL: https://<your-webhook-host>/webhook/$id
-       Resource types: Issues
+       Resource types: Issues + Comments
      Copy the signing secret.
   2. Paste it into .env as: ${env_key}=<secret>
   3. Create the 'agent' label in Linear (and optionally 'yolo').

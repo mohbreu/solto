@@ -8,6 +8,12 @@ export interface LinearIssue {
   teamId: string;
 }
 
+export interface LinearComment {
+  id: string;
+  body: string;
+  issueId: string;
+}
+
 export const STATE_IN_PROGRESS = "In Progress";
 export const STATE_IN_REVIEW = "In Review";
 export const STATE_TODO = "Todo";
@@ -74,6 +80,41 @@ export async function getIssueStateName(
     { id: issueId }
   );
   return data.issue?.state?.name ?? null;
+}
+
+export async function getIssueById(
+  issueId: string
+): Promise<LinearIssue | null> {
+  const data = await linearGraphQL<{
+    issue:
+      | {
+          id: string;
+          identifier: string;
+          title: string;
+          description: string | null;
+          team: { id: string };
+        }
+      | null;
+  }>(
+    `query IssueDetails($id: String!) {
+      issue(id: $id) {
+        id
+        identifier
+        title
+        description
+        team { id }
+      }
+    }`,
+    { id: issueId }
+  );
+  if (!data.issue) return null;
+  return {
+    id: data.issue.id,
+    identifier: data.issue.identifier,
+    title: data.issue.title,
+    description: data.issue.description ?? "",
+    teamId: data.issue.team.id,
+  };
 }
 
 const stateCache = new Map<string, Map<string, string>>();

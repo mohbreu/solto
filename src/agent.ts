@@ -1,54 +1,69 @@
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { exec, execSilent } from "./exec.js";
 import {
   postLinearComment,
   setIssueState,
+  STATE_DONE,
   STATE_IN_PROGRESS,
   STATE_IN_REVIEW,
   STATE_TODO,
-  STATE_DONE,
+  type LinearIssue,
 } from "./linear.js";
-import type { LinearIssue } from "./linear.js";
+import {
+  deletePullRequestState,
+  savePullRequestState,
+  type PullRequestState,
+} from "./pr-state.js";
 import type { ProjectConfig } from "./projects.js";
-import { mkdir, readFile, rm } from "node:fs/promises";
-import { runCoder, CODER_DISPLAY_NAMES } from "./runners.js";
+import { CODER_DISPLAY_NAMES, runCoder } from "./runners.js";
+
+interface RunAgentOptions {
+  direct?: boolean;
+  type?: string;
+  existingPr?: PullRequestState;
+  followUpInstruction?: string;
+}
 
 export async function runAgent(
   issue: LinearIssue,
   project: ProjectConfig,
-  opts: { direct?: boolean; type?: string } = {}
+  opts: RunAgentOptions = {}
 ) {
   const type = opts.type ?? "chore";
-  const branch = `${type}/${issue.identifier}-${slugify(issue.title)}`;
+  const branch = opts.existingPr?.branch
+    ?? `${type}/${issue.identifier}-${slugify(issue.title)}`;
+  const base = opts.existingPr?.base ?? project.githubBase;
   const worktree = `${project.workersPath}/${issue.id}`;
   const prFile = `/tmp/solto-pr-${issue.id}.md`;
+  const isIteration = Boolean(opts.existingPr);
 
   console.log(`[${project.id}/${issue.id}] Starting: ${issue.title}`);
 
   try {
     await postLinearComment(
       issue.id,
-      `Agent started on task: ${issue.title}`
+      isIteration
+        ? `Agent started updating the existing PR for: ${issue.title}`
+        : `Agent started on task: ${issue.title}`
     );
     await setIssueState(issue.id, issue.teamId, STATE_IN_PROGRESS);
 
     await mkdir(project.workersPath, { recursive: true });
-    await exec("git", ["-C", project.repoPath, "fetch", "origin", project.githubBase]);
-    await exec("git", [
-      "-C", project.repoPath,
-      "worktree", "add", worktree,
-      "-b", branch,
-      `origin/${project.githubBase}`,
-    ]);
+    await prepareWorktree(project, worktree, branch, base, isIteration);
 
     await postLinearComment(issue.id, "Workspace ready. Running agent.");
-    const coder = await runCoder(buildPrompt(issue, type, prFile), worktree);
-    await postLinearComment(
-      issue.id,
-      `${CODER_DISPLAY_NAMES[coder]} finished.`
+    const coder = await runCoder(
+      buildPrompt(issue, type, {
+        prFile,
+        followUpInstruction: opts.followUpInstruction,
+        existingPrUrl: opts.existingPr?.prUrl,
+      }),
+      worktree
     );
+    await postLinearComment(issue.id, `${CODER_DISPLAY_NAMES[coder]} finished.`);
 
     const diff = await exec("git", [
-      "-C", worktree, "diff", "--stat", `origin/${project.githubBase}`,
+      "-C", worktree, "diff", "--stat", `origin/${base}`,
     ]).catch(() => "");
     const hasChanges = diff.trim().length > 0;
 
@@ -57,7 +72,11 @@ export async function runAgent(
         issue.id,
         "Agent finished but made no changes. The task may already be complete or the description needs more detail."
       );
-      await setIssueState(issue.id, issue.teamId, STATE_TODO);
+      await setIssueState(
+        issue.id,
+        issue.teamId,
+        isIteration ? STATE_IN_REVIEW : STATE_TODO
+      );
       return;
     }
 
@@ -75,16 +94,17 @@ export async function runAgent(
     if (opts.direct) {
       await exec("git", [
         "-C", worktree,
-        "push", "origin", `HEAD:${project.githubBase}`,
+        "push", "origin", `HEAD:${base}`,
       ]);
 
       await postLinearComment(
         issue.id,
-        `Done. Pushed directly to ${project.githubBase} (yolo).\n\n${diff.trim()}`
+        `Done. Pushed directly to ${base} (yolo).\n\n${diff.trim()}`
       );
       await setIssueState(issue.id, issue.teamId, STATE_DONE);
+      await deletePullRequestState(issue.id);
 
-      console.log(`[${project.id}/${issue.id}] Done - direct push to ${project.githubBase}`);
+      console.log(`[${project.id}/${issue.id}] Done - direct push to ${base}`);
       return;
     }
 
@@ -92,6 +112,25 @@ export async function runAgent(
       "-C", worktree,
       "push", "--force-with-lease", "origin", branch,
     ]);
+
+    if (isIteration) {
+      const prUrl = opts.existingPr!.prUrl;
+      await savePullRequestState({
+        issueId: issue.id,
+        projectId: project.id,
+        branch,
+        base,
+        prUrl,
+      });
+      await postLinearComment(
+        issue.id,
+        `Done. Updated PR: ${prUrl}\n\n${diff.trim()}`
+      );
+      await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
+
+      console.log(`[${project.id}/${issue.id}] Done - updated PR: ${prUrl}`);
+      return;
+    }
 
     const { title: prTitle, body: prBody } = await readPrMeta(
       prFile,
@@ -105,29 +144,40 @@ export async function runAgent(
         "pr", "create",
         "--title", prTitle,
         "--body", prBody,
-        "--base", project.githubBase,
+        "--base", base,
         "--head", branch,
       ],
       { cwd: worktree }
     );
 
-    const url = prOutput.trim().split("\n").pop() ?? prOutput.trim();
+    const prUrl = prOutput.trim().split("\n").pop() ?? prOutput.trim();
+    await savePullRequestState({
+      issueId: issue.id,
+      projectId: project.id,
+      branch,
+      base,
+      prUrl,
+    });
 
     await postLinearComment(
       issue.id,
-      `Done. PR opened: ${url}\n\n${diff.trim()}`
+      `Done. PR opened: ${prUrl}\n\n${diff.trim()}`
     );
     await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
-    console.log(`[${project.id}/${issue.id}] Done - PR: ${url}`);
+    console.log(`[${project.id}/${issue.id}] Done - PR: ${prUrl}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    await postLinearComment(
+    await postLinearComment(issue.id, `Agent failed.\n\n${message}`).catch(() => {});
+    await setIssueState(
       issue.id,
-      `Agent failed.\n\n${message}`
+      issue.teamId,
+      isIteration ? STATE_IN_REVIEW : STATE_TODO
     ).catch(() => {});
-    await setIssueState(issue.id, issue.teamId, STATE_TODO).catch(() => {});
+    if (!isIteration) {
+      await deletePullRequestState(issue.id).catch(() => {});
+    }
 
     console.error(`[${project.id}/${issue.id}] Failed:`, err);
   } finally {
@@ -141,6 +191,37 @@ export async function runAgent(
     ]);
     await rm(prFile, { force: true }).catch(() => {});
   }
+}
+
+async function prepareWorktree(
+  project: ProjectConfig,
+  worktree: string,
+  branch: string,
+  base: string,
+  isIteration: boolean
+): Promise<void> {
+  if (isIteration) {
+    await exec("git", ["-C", project.repoPath, "fetch", "origin", branch]);
+    await exec("git", [
+      "-C", project.repoPath,
+      "branch", "-f", branch,
+      `origin/${branch}`,
+    ]);
+    await exec("git", [
+      "-C", project.repoPath,
+      "worktree", "add", worktree,
+      branch,
+    ]);
+    return;
+  }
+
+  await exec("git", ["-C", project.repoPath, "fetch", "origin", base]);
+  await exec("git", [
+    "-C", project.repoPath,
+    "worktree", "add", worktree,
+    "-b", branch,
+    `origin/${base}`,
+  ]);
 }
 
 async function readPrMeta(
@@ -168,8 +249,42 @@ async function readPrMeta(
 function buildPrompt(
   issue: LinearIssue,
   type: string,
-  prFile: string
+  opts: {
+    prFile: string;
+    followUpInstruction?: string;
+    existingPrUrl?: string;
+  }
 ): string {
+  const followUpBlock = opts.followUpInstruction?.trim()
+    ? `Follow-up request from a new Linear comment:
+${opts.followUpInstruction.trim()}
+
+`
+    : "";
+  const existingPrBlock = opts.existingPrUrl
+    ? `Existing PR:
+${opts.existingPrUrl}
+
+`
+    : "";
+  const modeInstruction = opts.existingPrUrl
+    ? "Update the existing PR branch to address the follow-up request"
+    : "Complete the task fully without asking for clarification";
+  const prMetadataBlock = opts.existingPrUrl
+    ? `PR metadata:
+- Do not create a new PR
+- Do not change the branch name
+- Update the existing PR with one or more new commits as needed`
+    : `PR metadata:
+- After committing, write a short PR title and body to: ${opts.prFile}
+- Format: first line = title, blank line, then body.
+- Title MUST follow Conventional Commits, type "${type}", and describe
+  the ACTUAL change you made (not the ticket title).
+  Example: "${type}: remove maestro step from CI workflow"
+- Body should summarize the actual diff and why: 1 to 3 short paragraphs
+  or a tight bulleted list. No ticket IDs, no "Resolves:" references,
+  and no self-attribution.`;
+
   return `
 You are an autonomous software agent working on a real codebase.
 
@@ -178,28 +293,20 @@ Task: ${issue.title}
 Details:
 ${issue.description}
 
-Instructions:
+${followUpBlock}${existingPrBlock}Instructions:
+- ${modeInstruction}
 - Read AGENTS.md at the repo root FIRST and follow every rule in it
   (style, commit format, attribution, dependency policy, workflow). It
   takes precedence over your defaults.
-- Complete the task fully without asking for clarification
 - Follow existing code conventions in the repo
 - Run the test suite if one exists and fix any failures you introduce
 - Only modify files directly relevant to this task
 - Make reasonable assumptions where the spec is ambiguous
 - Stage and commit your changes yourself, following AGENTS.md commit rules
   (Conventional Commits, imperative mood, no self-attribution). Do NOT
-  push — solto handles pushing and PR creation.
+  push; solto handles pushing and PR creation.
 
-PR metadata:
-- After committing, write a short PR title and body to: ${prFile}
-- Format: first line = title, blank line, then body.
-- Title MUST follow Conventional Commits, type "${type}", and describe
-  the ACTUAL change you made (not the ticket title).
-  Example: "${type}: remove maestro step from CI workflow"
-- Body should summarize the actual diff and why — 1-3 short paragraphs
-  or a tight bulleted list. No ticket IDs, no "Resolves:" references,
-  no self-attribution.
+${prMetadataBlock}
 `.trim();
 }
 

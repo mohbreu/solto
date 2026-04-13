@@ -7,7 +7,8 @@ Self-hosted orchestrator that turns labeled [Linear](https://linear.app/) issues
 1. You add the `agent` label to a Linear issue.
 2. Linear hits a webhook served by solto (via [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)).
 3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via [`gh`](https://cli.github.com/).
-4. The Linear issue self-narrates through comments and workflow states.
+4. If solto already opened a PR for that issue, a later Linear comment that starts with `/agent` updates the same PR branch.
+5. The Linear issue self-narrates through comments and workflow states.
 
 An issue can trigger solto in either of these ways:
 
@@ -22,6 +23,13 @@ Commit and branch naming are driven by Linear labels:
 - if no type label is present, solto defaults to `chore`
 
 Add the `yolo` label alongside `agent` to push directly to `main` instead of opening a PR.
+
+For follow-up changes on an existing PR, add a Linear comment that starts with `/agent`.
+Example:
+
+```text
+/agent address the review feedback about dependency versions and rerun lint
+```
 
 <details>
 <summary><strong>⚠ Trust model: read before deploying</strong></summary>

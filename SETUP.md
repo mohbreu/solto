@@ -69,7 +69,7 @@ Minimum contents for the agent to do good work:
 1. **`agent` label** (required trigger). Adding this to an issue fires the webhook and runs solto.
 2. **`yolo` label** (optional). If present alongside `agent`, solto pushes directly to the base branch instead of opening a PR.
 3. **Conventional-commit type labels** (optional). solto picks up `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `style`, `perf`, `build`, `ci`, `revert`, or any `type:<x>` label, and uses it as the commit/PR type. Defaults to `chore`.
-4. **Webhook**. URL `https://<your-host>/webhook/<project-id>`, resource type `Issues`, scoped to the team that owns the project. Paste the signing secret into `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE, dashes to underscores).
+4. **Webhook**. URL `https://<your-host>/webhook/<project-id>`, resource types `Issues` and `Comments`, scoped to the team that owns the project. Paste the signing secret into `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE, dashes to underscores).
 
 ### How a good Linear issue looks
 
@@ -97,6 +97,7 @@ Vague issues produce vague diffs. In some cases the agent comments "made no chan
     prune.sh               # cleans stale worktrees + merged branches
   repos/<project>/         # full clone of each repo (one per project)
   workers/<project>/<id>/  # ephemeral git worktrees, one per active job
+  .solto-state/prs/        # local PR metadata so /agent comments can update an existing PR branch
 ~/.cloudflared/
   cert.pem                 # cloudflared account cert (from `tunnel login`)
   <UUID>.json              # tunnel credentials
@@ -185,7 +186,7 @@ For each project in `projects.local.json`:
 1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`.
 2. **Webhook**: Linear → Settings → API → Webhooks → New webhook.
    - URL: `https://<your-webhook-host>/webhook/<project-id>`
-   - Resource types: **Issues** only
+   - Resource types: **Issues** and **Comments**
    - Team: the team that owns the project
    - Copy the signing secret → `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE form of the id).
 3. **Labels** (per workspace):
@@ -244,6 +245,8 @@ Add the `agent` label to a Linear issue. The webhook fires, solto:
 6. Cleans up the worktree
 
 If `yolo` is also present: pushes directly to `main`, sets state → **Done**. On failure / no-changes: comments the error, sets state → **Todo**.
+
+To iterate on an open PR, add a new Linear comment that starts with `/agent`. solto reuses the existing PR branch, makes another commit, pushes it to the same branch, and comments back with the updated PR URL.
 
 ## Repo conventions for agents
 
