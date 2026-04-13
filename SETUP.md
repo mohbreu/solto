@@ -41,6 +41,8 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 | [OpenAI API](https://platform.openai.com/) key *or* [ChatGPT subscription](https://openai.com/chatgpt/pricing/) (`codex login`) | If `CODER=codex` (default) |
 | A [Cloudflare](https://www.cloudflare.com/)-managed domain | For the Cloudflare Tunnel hostname |
 
+Best practice: use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
+
 ## Target project requirements: what each repo needs to work with solto
 
 For solto to open PRs against a GitHub repo, the repo must meet these conditions:
@@ -183,7 +185,7 @@ cloudflared tunnel run solto-tunnel
 
 For each project in `projects.local.json`:
 
-1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`.
+1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`. Best practice: generate this key from a dedicated automation user such as `solto-bot`, not from your personal Linear account.
 2. **Webhook**: Linear → Settings → API → Webhooks → New webhook.
    - URL: `https://<your-webhook-host>/webhook/<project-id>`
    - Resource types: **Issues** and **Comments**
