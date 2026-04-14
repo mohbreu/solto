@@ -3,7 +3,9 @@ import { serve } from "@hono/node-server";
 import crypto from "node:crypto";
 import { runAgent } from "./agent.js";
 import {
+  getIssueStateName,
   postLinearComment,
+  STATE_TODO,
   verifyLinearWebhook,
   type LinearIssue,
 } from "./linear.js";
@@ -19,6 +21,16 @@ const DAY_MS = 24 * HOUR_MS;
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const ISSUE_ID_RE = /^[a-zA-Z0-9-]{1,64}$/;
 const ISSUE_IDENTIFIER_RE = /^[A-Z0-9]+-[0-9]+$/;
+
+function normalizeStateName(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "");
+}
+
+function isTodoStateName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const normalized = normalizeStateName(name);
+  return normalized === normalizeStateName(STATE_TODO) || normalized === "todo";
+}
 
 function tokensMatch(provided: string | undefined, expected: string): boolean {
   if (!expected || !provided) return false;
@@ -117,13 +129,14 @@ app.post("/webhook/:projectId", async (c) => {
 
   const labels = (data?.labels ?? []) as { id: string; name: string }[];
   const labelNames = labels.map((l) => l.name);
+  const issue = data as LinearIssue;
   console.log(
     `[webhook] ${projectId} type=${webhookType} action=${action} issue=${data?.id} labels=[${labelNames.join(",")}]`
   );
 
-  if (action !== "update") {
-    console.log(`[webhook] ignored (action=${action})`);
-    return c.text("OK");
+  if (!ISSUE_ID_RE.test(issue.id) || !ISSUE_IDENTIFIER_RE.test(issue.identifier)) {
+    console.log(`[webhook] rejected malformed issue id/identifier: ${issue.id}/${issue.identifier}`);
+    return c.text("Bad Request", 400);
   }
 
   const agentLabel = labels.find((l) => l.name === "agent");
@@ -132,13 +145,29 @@ app.post("/webhook/:projectId", async (c) => {
     return c.text("OK");
   }
 
-  const prevLabelIds = updatedFrom?.labelIds as string[] | undefined;
-  if (prevLabelIds === undefined) {
-    console.log(`[webhook] ignored (labels did not change in this event)`);
-    return c.text("OK");
-  }
-  if (prevLabelIds.includes(agentLabel.id)) {
-    console.log(`[webhook] ignored (agent label was already present)`);
+  if (action === "create") {
+    const stateName = await getIssueStateName(issue.id).catch((err) => {
+      console.error(`[webhook] failed to fetch issue state for ${projectId}/${issue.id}:`, err);
+      return null;
+    });
+    if (!isTodoStateName(stateName)) {
+      console.log(
+        `[webhook] ignored (action=create but state is not todo: ${stateName ?? "unknown"})`
+      );
+      return c.text("OK");
+    }
+  } else if (action === "update") {
+    const prevLabelIds = updatedFrom?.labelIds as string[] | undefined;
+    if (prevLabelIds === undefined) {
+      console.log(`[webhook] ignored (labels did not change in this event)`);
+      return c.text("OK");
+    }
+    if (prevLabelIds.includes(agentLabel.id)) {
+      console.log(`[webhook] ignored (agent label was already present)`);
+      return c.text("OK");
+    }
+  } else {
+    console.log(`[webhook] ignored (action=${action})`);
     return c.text("OK");
   }
 
@@ -150,12 +179,6 @@ app.post("/webhook/:projectId", async (c) => {
   const type = prefixed || bare || "chore";
 
   const workers = pools.get(projectId)!;
-  const issue = data as LinearIssue;
-
-  if (!ISSUE_ID_RE.test(issue.id) || !ISSUE_IDENTIFIER_RE.test(issue.identifier)) {
-    console.log(`[webhook] rejected malformed issue id/identifier: ${issue.id}/${issue.identifier}`);
-    return c.text("Bad Request", 400);
-  }
 
   if (workers.has(issue.id)) {
     console.log(`[${projectId}] ${issue.id} already running, ignoring`);

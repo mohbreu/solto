@@ -9,6 +9,11 @@ Self-hosted orchestrator that turns labeled [Linear](https://linear.app/) issues
 3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via [`gh`](https://cli.github.com/).
 4. The Linear issue self-narrates through comments and workflow states.
 
+An issue can trigger solto in either of these ways:
+
+- create the issue in `Todo` / `To do` with the `agent` label already applied
+- add the `agent` label later on an existing issue
+
 Add the `yolo` label alongside `agent` to push directly to `main` instead of opening a PR.
 
 ## ⚠ Trust model — read before deploying

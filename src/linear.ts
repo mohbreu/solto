@@ -62,6 +62,20 @@ export async function postLinearComment(
   );
 }
 
+export async function getIssueStateName(
+  issueId: string
+): Promise<string | null> {
+  const data = await linearGraphQL<{
+    issue: { state: { name: string } | null } | null;
+  }>(
+    `query IssueState($id: String!) {
+      issue(id: $id) { state { name } }
+    }`,
+    { id: issueId }
+  );
+  return data.issue?.state?.name ?? null;
+}
+
 const stateCache = new Map<string, Map<string, string>>();
 
 async function getStateId(
