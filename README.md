@@ -78,6 +78,14 @@ Each project gets:
 
 Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
 
+Fast path on a fresh Ubuntu host:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+```
+
+That installs host dependencies, clones `solto` into `/home/agent/solto`, runs `pnpm install`, and seeds `.env` plus `projects.local.json` if they do not exist yet. You still need to do the interactive/operator-specific steps afterward: `gh auth login`, coder auth, `.env` values, project config, webhook setup, and tunnel setup.
+
 After install or any auth/config change, run:
 
 ```bash
@@ -85,6 +93,14 @@ After install or any auth/config change, run:
 ```
 
 It verifies the local env, project config, repo access, pm2 state, Linear token, and local `/health` + `/status`.
+
+For a quick local sanity check:
+
+```bash
+pnpm test
+```
+
+The lightweight test suite covers local state persistence plus a few pure status/log helpers. It also runs in GitHub Actions for every pull request and every push to `main`.
 
 For runtime checks:
 

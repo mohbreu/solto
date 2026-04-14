@@ -108,9 +108,38 @@ Vague issues produce vague diffs. In some cases the agent comments "made no chan
 
 ## Installing on a new machine
 
-### 1. Provision the host (once, as root or sudo)
+### 1. Fast path: one command on a fresh Ubuntu host
 
-On a fresh Ubuntu box:
+```bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+```
+
+This does four things:
+
+- runs `scripts/bootstrap.sh`
+- clones or updates `~/solto`
+- runs `pnpm install`
+- seeds `.env` and `projects.local.json` from the examples if they are missing
+
+It intentionally does not try to automate the interactive or environment-specific steps:
+
+- `gh auth login`
+- `codex login` or Claude auth / API key setup
+- editing `.env`
+- editing `projects.local.json`
+- Cloudflare Tunnel login and DNS setup
+- Linear webhook creation
+
+After the installer finishes, continue with:
+
+1. [Authenticate the coder](#4-authenticate-the-coder)
+2. [Set up public HTTPS](#5-set-up-public-https-cloudflare-tunnel)
+3. [Create Linear webhooks](#6-create-linear-webhooks-per-project)
+4. [Start solto](#7-start-solto)
+
+### 2. Manual path: bootstrap only
+
+If you want to provision the host without cloning/configuring the repo yet, use the old bootstrap-only flow:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
@@ -118,7 +147,7 @@ curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstra
 
 This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared`, and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
 
-### 2. Clone and configure solto (as the `agent` user)
+### 3. Clone and configure solto (as the `agent` user)
 
 ```bash
 sudo su - agent
@@ -136,7 +165,7 @@ for id in $(jq -r '.[].id' projects.local.json); do
 done
 ```
 
-### 3. Authenticate the coder
+### 4. Authenticate the coder
 
 **Codex (default)**: two options:
 - ChatGPT subscription: run `codex login` once (browser flow). Credentials land in `~/.codex/`. Leave `OPENAI_API_KEY` empty in `.env`.
@@ -150,7 +179,7 @@ When `CODER=claude`, solto also passes a small generic `--agents` set to Claude 
 
 Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
-### 4. Set up public HTTPS ([Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/))
+### 5. Set up public HTTPS ([Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/))
 
 Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). It's free, zero-firewall, gives automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
 
@@ -183,7 +212,7 @@ cloudflared tunnel run solto-tunnel
 # Ctrl+C once you see it connect; pm2 will manage it from here
 ```
 
-### 5. Create Linear webhooks (per project)
+### 6. Create Linear webhooks (per project)
 
 For each project in `projects.local.json`:
 
@@ -198,7 +227,7 @@ For each project in `projects.local.json`:
    - keep issues in `Todo` / `To do` when you want them to start
    - `yolo` is optional and pushes directly to `main` instead of opening a PR
 
-### 6. Start solto
+### 7. Start solto
 
 ```bash
 cd ~/solto
@@ -274,6 +303,14 @@ pm2 info cloudflare-tunnel
 ```
 
 `./scripts/doctor.sh` is the first thing to run when solto stops picking up work or auth looks suspect. It checks the local env, pm2 runtime env, repo access, Linear API token, and local health endpoints, and exits non-zero on hard failures.
+
+For a lightweight code-level sanity check:
+
+```bash
+pnpm test
+```
+
+GitHub Actions also runs this test suite on every pull request and every push to `main`.
 
 ### Start / stop / restart
 
