@@ -4,6 +4,36 @@
 
 Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issues into GitHub pull requests by running a coding agent ([Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or [OpenAI Codex](https://github.com/openai/codex)) in a dedicated [git worktree](https://git-scm.com/docs/git-worktree) per issue.
 
+The practical pitch: solto is built so the surrounding stack can stay on free tiers. You can run it with a free [Linear](https://linear.app/) workspace, free [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), and a normal GitHub repo. The thing you should expect to pay for is the LLM itself.
+
+## Install
+
+Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
+
+Fast path on a fresh Ubuntu host:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+```
+
+That installs host dependencies, clones `solto` into `/home/agent/solto`, runs `pnpm install`, and seeds `.env` plus `projects.local.json` if they do not exist yet. You still need to do the interactive/operator-specific steps afterward: `gh auth login`, coder auth, `.env` values, project config, webhook setup, and tunnel setup.
+
+After install or any auth/config change, run:
+
+```bash
+./scripts/doctor.sh
+```
+
+It verifies the local env, project config, repo access, pm2 state, Linear token, and local `/health` + `/status`.
+
+For a quick local sanity check:
+
+```bash
+pnpm test
+```
+
+The lightweight test suite covers local state persistence plus a few pure status/log helpers. It also runs in GitHub Actions for every pull request and every push to `main`.
+
 ## How it works
 
 1. You assign a Linear issue to your dedicated bot user, such as `solto-bot`.
@@ -49,9 +79,7 @@ solto runs a coding agent with `--dangerously-skip-permissions` (Claude Code) / 
 
 </details>
 
-## Practical requirements
-
-At a practical level, solto needs:
+## Requirements
 
 - A Linux host with a dedicated `agent` user
 - [Node LTS](https://nodejs.org/), [pnpm](https://pnpm.io/), [pm2](https://pm2.keymetrics.io/), [git](https://git-scm.com/), [`gh`](https://cli.github.com/), and [`jq`](https://jqlang.org/)
@@ -75,34 +103,6 @@ Each project gets:
 - its own clone under `repos/<id>/`
 - its own worktrees under `workers/<id>/`
 - its own concurrency and rate-limit settings in `projects.local.json`
-
-## Install
-
-Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
-
-Fast path on a fresh Ubuntu host:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
-```
-
-That installs host dependencies, clones `solto` into `/home/agent/solto`, runs `pnpm install`, and seeds `.env` plus `projects.local.json` if they do not exist yet. You still need to do the interactive/operator-specific steps afterward: `gh auth login`, coder auth, `.env` values, project config, webhook setup, and tunnel setup.
-
-After install or any auth/config change, run:
-
-```bash
-./scripts/doctor.sh
-```
-
-It verifies the local env, project config, repo access, pm2 state, Linear token, and local `/health` + `/status`.
-
-For a quick local sanity check:
-
-```bash
-pnpm test
-```
-
-The lightweight test suite covers local state persistence plus a few pure status/log helpers. It also runs in GitHub Actions for every pull request and every push to `main`.
 
 For runtime checks:
 
