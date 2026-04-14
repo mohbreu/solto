@@ -1,3 +1,5 @@
+![solto banner](./assets/readme-banner.jpg)
+
 # solto [![Test](https://github.com/mohbreu/solto/actions/workflows/test.yml/badge.svg)](https://github.com/mohbreu/solto/actions/workflows/test.yml)
 
 Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issues into GitHub pull requests by running a coding agent ([Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or [OpenAI Codex](https://github.com/openai/codex)) in a dedicated [git worktree](https://git-scm.com/docs/git-worktree) per issue.
