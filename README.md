@@ -10,13 +10,12 @@ Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issue
 4. If solto already opened a PR for that issue, a later Linear comment that starts with `@solto-bot` updates the same PR branch.
 5. The Linear issue self-narrates through comments and workflow states.
 
-When `CODER=claude`, solto also enables a small set of generic Claude subagents by default for research, bounded implementation, and review. The main agent still owns the final branch and PR.
+When `CODER=claude`, solto enables a small default set of Claude subagents for research, bounded implementation, and review. The main agent still owns the final branch and PR.
 
-An issue can trigger solto in either of these ways:
+An issue starts when it ends up both:
 
-- create the issue in `Todo` / `To do` already assigned to the bot user
-- assign an existing issue to the bot user while it is already in `Todo` / `To do`
-- move an issue into `Todo` / `To do` while it is already assigned to the bot user
+- assigned to the bot user
+- in `Todo` / `To do`
 
 Commit and branch naming are driven by Linear labels:
 
@@ -78,6 +77,23 @@ Each project gets:
 ## Install
 
 Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
+
+After install or any auth/config change, run:
+
+```bash
+./scripts/doctor.sh
+```
+
+It verifies the local env, project config, repo access, pm2 state, Linear token, and local `/health` + `/status`.
+
+For runtime checks:
+
+```bash
+curl -H "x-status-token: <STATUS_TOKEN>" https://<your-webhook-host>/status | jq
+curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?include=logs" | jq
+```
+
+`/status` includes live per-project job counts, recent persisted jobs, bounded pm2 stats, and a response timestamp. Add `?include=logs` for a short log tail.
 
 ## License
 

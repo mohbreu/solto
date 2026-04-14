@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import { readFile } from "node:fs/promises";
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { runAgent } from "./agent.js";
 import {
   getIssueById,
@@ -20,6 +24,8 @@ import {
   saveJobState,
 } from "./run-state.js";
 
+const execFileAsync = promisify(execFile);
+
 const CONVENTIONAL_TYPES = new Set([
   "feat", "fix", "chore", "docs", "refactor",
   "test", "style", "perf", "build", "ci", "revert",
@@ -28,8 +34,83 @@ const CONVENTIONAL_TYPES = new Set([
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
+const STATUS_LOG_TAIL_LINES = 20;
 const ISSUE_ID_RE = /^[a-zA-Z0-9-]{1,64}$/;
 const ISSUE_IDENTIFIER_RE = /^[A-Z0-9]+-[0-9]+$/;
+const PM2_HOME = process.env.PM2_HOME || path.join(process.env.HOME || "", ".pm2");
+
+interface ProcessSummary {
+  status: string;
+  pid: number | null;
+  uptimeSec: number | null;
+  restarts: number | null;
+  memoryMb: number | null;
+  cpuPct: number | null;
+}
+
+async function getProcessStats(): Promise<Record<string, ProcessSummary> | null> {
+  try {
+    const { stdout } = await execFileAsync("pm2", ["jlist"]);
+    const parsed = JSON.parse(stdout) as Array<{
+      name?: string;
+      pid?: number;
+      monit?: { memory?: number; cpu?: number };
+      pm2_env?: {
+        status?: string;
+        pm_uptime?: number;
+        restart_time?: number;
+      };
+    }>;
+    const names = new Set(["solto", "cloudflare-tunnel"]);
+    const now = Date.now();
+    return Object.fromEntries(
+      parsed
+        .filter((proc) => proc.name && names.has(proc.name))
+        .map((proc) => [
+          proc.name!,
+          {
+            status: proc.pm2_env?.status ?? "unknown",
+            pid: typeof proc.pid === "number" ? proc.pid : null,
+            uptimeSec: proc.pm2_env?.pm_uptime
+              ? Math.max(0, Math.floor((now - proc.pm2_env.pm_uptime) / 1000))
+              : null,
+            restarts: typeof proc.pm2_env?.restart_time === "number"
+              ? proc.pm2_env.restart_time
+              : null,
+            memoryMb: typeof proc.monit?.memory === "number"
+              ? Number((proc.monit.memory / (1024 * 1024)).toFixed(1))
+              : null,
+            cpuPct: typeof proc.monit?.cpu === "number"
+              ? Number(proc.monit.cpu.toFixed(1))
+              : null,
+          },
+        ])
+    );
+  } catch (err) {
+    console.error("[status] failed to read pm2 process stats:", err);
+    return null;
+  }
+}
+
+async function readLogTail(filePath: string, maxLines: number): Promise<string[]> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return raw
+      .trimEnd()
+      .split("\n")
+      .slice(-maxLines);
+  } catch {
+    return [];
+  }
+}
+
+async function getStatusLogs(): Promise<Record<string, string[]>> {
+  return {
+    soltoOutTail: await readLogTail(path.join(PM2_HOME, "logs", "solto-out.log"), STATUS_LOG_TAIL_LINES),
+    soltoErrorTail: await readLogTail(path.join(PM2_HOME, "logs", "solto-error.log"), STATUS_LOG_TAIL_LINES),
+    tunnelErrorTail: await readLogTail(path.join(PM2_HOME, "logs", "cloudflare-tunnel-error.log"), STATUS_LOG_TAIL_LINES),
+  };
+}
 function normalizeStateName(name: string): string {
   return name.toLowerCase().replace(/\s+/g, "");
 }
@@ -389,7 +470,14 @@ app.get("/status", async (c) => {
   }
 
   const now = Date.now();
+  const include = new Set(
+    (c.req.query("include") ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
   const recentJobs = await listRecentJobStates(12);
+  const processStats = await getProcessStats();
   const status = Object.fromEntries(
     [...pools.entries()].map(([projectId, workers]) => {
       const list = history.get(projectId)!;
@@ -411,10 +499,18 @@ app.get("/status", async (c) => {
     })
   );
 
-  return c.json({
+  const payload: Record<string, unknown> = {
     ...status,
     _recent: recentJobs,
-  });
+    _process: processStats,
+    _generatedAt: new Date().toISOString(),
+  };
+
+  if (include.has("logs")) {
+    payload._logs = await getStatusLogs();
+  }
+
+  return c.json(payload);
 });
 
 async function main(): Promise<void> {
