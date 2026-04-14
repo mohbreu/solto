@@ -1,0 +1,22 @@
+{
+  "name": "solto",
+  "version": "1.0.0",
+  "description": "Linear-triggered coding-agent orchestrator (Claude Code / Codex). Listens for labeled Linear issues, runs an agent in a git worktree, opens a PR.",
+  "scripts": {
+    "start": "tsx --env-file=.env src/server.ts",
+    "prune": "bash scripts/prune.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@hono/node-server": "^1.19.13",
+    "hono": "^4.12.12"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "my-project",
+    "githubRepo": "your-org/your-repo",
+    "githubBase": "main",
+    "maxParallel": 2,
+    "maxPerHour": 10,
+    "maxPerDay": 50
+  }
+]
