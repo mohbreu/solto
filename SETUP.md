@@ -212,6 +212,7 @@ Verify:
 ```bash
 curl http://localhost:3000/health                       # → ok
 curl https://<your-webhook-host>/health                 # → ok (via tunnel)
+./scripts/doctor.sh                                     # full local setup check
 ```
 
 ## Environment variables (`~/solto/.env`)
@@ -242,12 +243,7 @@ pm2 restart solto
 
 ## Triggering an agent
 
-Get the issue into this state:
-
-- assigned to the bot user
-- in `Todo` / `To do`
-
-The order does not matter. Once an update leaves the issue in that state, the webhook fires and solto:
+Get the issue assigned to the bot user and into `Todo` / `To do`. The order does not matter. Once an update leaves the issue in that state, the webhook fires and solto:
 
 1. Posts a comment, sets state → **In Progress**
 2. Adds a git worktree off `origin/main`
@@ -274,7 +270,10 @@ All commands run as the `agent` user.
 pm2 status
 pm2 info solto
 pm2 info cloudflare-tunnel
+./scripts/doctor.sh
 ```
+
+`./scripts/doctor.sh` is the first thing to run when solto stops picking up work or auth looks suspect. It checks the local env, pm2 runtime env, repo access, Linear API token, and local health endpoints, and exits non-zero on hard failures.
 
 ### Start / stop / restart
 
@@ -310,6 +309,9 @@ Raw log files: `~/.pm2/logs/`.
 curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
     https://<your-webhook-host>/status | jq
 
+curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
+    "https://<your-webhook-host>/status?include=logs" | jq
+
 pm2 logs solto -f
 
 # Worktrees on disk = jobs in flight
@@ -319,7 +321,14 @@ ls ~/solto/workers/<project>/
 git -C ~/solto/workers/<project>/<issue-id>/ status
 ```
 
-`/status` returns the per-project live view plus a `_recent` array of the latest persisted jobs. That helps explain what happened if `solto` restarted and the in-memory active-job view was lost.
+`/status` returns:
+
+- live per-project activity
+- `_recent` for the latest persisted jobs, including interrupted runs after a restart
+- `_process` for bounded pm2 stats on `solto` and `cloudflare-tunnel`
+- `_generatedAt` as the snapshot timestamp
+
+Add `?include=logs` for a short pm2 log tail without opening `pm2 logs`.
 
 In Linear: every issue assigned to the bot user self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
 
