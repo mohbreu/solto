@@ -91,9 +91,10 @@ For runtime checks:
 ```bash
 curl -H "x-status-token: <STATUS_TOKEN>" https://<your-webhook-host>/status | jq
 curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?include=logs" | jq
+curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?include=logs&tail=5" | jq
 ```
 
-`/status` includes live per-project job counts, recent persisted jobs, bounded pm2 stats, and a response timestamp. Add `?include=logs` for a short log tail.
+`/status` includes live per-project job counts, recent persisted jobs, bounded pm2 stats, and a response timestamp. Add `?include=logs` for a compact log tail, and `tail=<n>` to control its size.
 
 ## License
 

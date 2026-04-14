@@ -312,6 +312,9 @@ curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
 curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
     "https://<your-webhook-host>/status?include=logs" | jq
 
+curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
+    "https://<your-webhook-host>/status?include=logs&tail=5" | jq
+
 pm2 logs solto -f
 
 # Worktrees on disk = jobs in flight
@@ -329,6 +332,8 @@ git -C ~/solto/workers/<project>/<issue-id>/ status
 - `_generatedAt` as the snapshot timestamp
 
 Add `?include=logs` for a short pm2 log tail without opening `pm2 logs`.
+
+Use `tail=<n>` to change the log limit. The server clamps it to a small safe range and removes repeated startup noise so the tail stays readable.
 
 In Linear: every issue assigned to the bot user self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
 

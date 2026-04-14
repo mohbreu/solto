@@ -35,6 +35,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const STATUS_LOG_TAIL_LINES = 20;
+const STATUS_LOG_TAIL_MIN = 1;
+const STATUS_LOG_TAIL_MAX = 50;
 const ISSUE_ID_RE = /^[a-zA-Z0-9-]{1,64}$/;
 const ISSUE_IDENTIFIER_RE = /^[A-Z0-9]+-[0-9]+$/;
 const PM2_HOME = process.env.PM2_HOME || path.join(process.env.HOME || "", ".pm2");
@@ -92,23 +94,84 @@ async function getProcessStats(): Promise<Record<string, ProcessSummary> | null>
   }
 }
 
+function parseTailLimit(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed)) return STATUS_LOG_TAIL_LINES;
+  return Math.min(STATUS_LOG_TAIL_MAX, Math.max(STATUS_LOG_TAIL_MIN, parsed));
+}
+
+function dedupeSequential(lines: string[]): string[] {
+  const deduped: string[] = [];
+  for (const line of lines) {
+    if (deduped[deduped.length - 1] === line) continue;
+    deduped.push(line);
+  }
+  return deduped;
+}
+
+function compactStartupNoise(lines: string[]): string[] {
+  const noisePatterns = [
+    /^> solto@/,
+    /^> tsx --env-file=/,
+    /^solto running on :3000$/,
+    /^  POST \/webhook\//,
+    /^  GET  \/status/,
+    /^  GET  \/health$/,
+    /^ ?ELIFECYCLE ? Command failed\.$/,
+    /^$/,
+  ];
+  const compacted: string[] = [];
+  let skippedNoise = 0;
+
+  for (const line of lines) {
+    const isNoise = noisePatterns.some((pattern) => pattern.test(line));
+    if (!isNoise) {
+      if (skippedNoise > 0) {
+        compacted.push(`[startup noise omitted: ${skippedNoise} lines]`);
+        skippedNoise = 0;
+      }
+      compacted.push(line);
+      continue;
+    }
+    skippedNoise += 1;
+  }
+
+  if (skippedNoise > 0) {
+    compacted.push(`[startup noise omitted: ${skippedNoise} lines]`);
+  }
+
+  return compacted;
+}
+
+function selectLatestErrorEntries(lines: string[], maxLines: number): string[] {
+  const interesting = lines.filter((line) =>
+    /\b(ERR|Error|Failed|fatal:|Authentication required|Repository not found)\b/.test(line)
+  );
+  const source = interesting.length > 0 ? interesting : lines.filter((line) => line.trim().length > 0);
+  return source.slice(-maxLines);
+}
+
 async function readLogTail(filePath: string, maxLines: number): Promise<string[]> {
   try {
     const raw = await readFile(filePath, "utf8");
     return raw
       .trimEnd()
       .split("\n")
-      .slice(-maxLines);
+      .slice(-(maxLines * 4));
   } catch {
     return [];
   }
 }
 
-async function getStatusLogs(): Promise<Record<string, string[]>> {
+async function getStatusLogs(maxLines: number): Promise<Record<string, string[]>> {
+  const outTail = await readLogTail(path.join(PM2_HOME, "logs", "solto-out.log"), maxLines);
+  const errorTail = await readLogTail(path.join(PM2_HOME, "logs", "solto-error.log"), maxLines);
+  const tunnelTail = await readLogTail(path.join(PM2_HOME, "logs", "cloudflare-tunnel-error.log"), maxLines);
+
   return {
-    soltoOutTail: await readLogTail(path.join(PM2_HOME, "logs", "solto-out.log"), STATUS_LOG_TAIL_LINES),
-    soltoErrorTail: await readLogTail(path.join(PM2_HOME, "logs", "solto-error.log"), STATUS_LOG_TAIL_LINES),
-    tunnelErrorTail: await readLogTail(path.join(PM2_HOME, "logs", "cloudflare-tunnel-error.log"), STATUS_LOG_TAIL_LINES),
+    soltoOutTail: compactStartupNoise(dedupeSequential(outTail)).slice(-maxLines),
+    soltoErrorTail: selectLatestErrorEntries(dedupeSequential(errorTail), maxLines),
+    tunnelErrorTail: selectLatestErrorEntries(dedupeSequential(tunnelTail), maxLines),
   };
 }
 function normalizeStateName(name: string): string {
@@ -476,6 +539,7 @@ app.get("/status", async (c) => {
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean)
   );
+  const logTail = parseTailLimit(c.req.query("tail"));
   const recentJobs = await listRecentJobStates(12);
   const processStats = await getProcessStats();
   const status = Object.fromEntries(
@@ -507,7 +571,7 @@ app.get("/status", async (c) => {
   };
 
   if (include.has("logs")) {
-    payload._logs = await getStatusLogs();
+    payload._logs = await getStatusLogs(logTail);
   }
 
   return c.json(payload);
