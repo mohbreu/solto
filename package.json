@@ -4,7 +4,8 @@
   "description": "Linear-triggered coding-agent orchestrator (Claude Code / Codex). Listens for bot-assigned Linear issues, runs an agent in a git worktree, opens a PR.",
   "scripts": {
     "start": "tsx --env-file=.env src/server.ts",
-    "prune": "bash scripts/prune.sh"
+    "prune": "bash scripts/prune.sh",
+    "test": "node --import tsx --test test/**/*.test.ts"
   },
   "keywords": [],
   "author": "",
