@@ -1,12 +1,12 @@
 # solto
 
-Self-hosted orchestrator that turns labeled Linear issues into pull requests by running a coding agent (Claude Code or OpenAI Codex) in a dedicated git worktree per issue.
+Self-hosted orchestrator that turns labeled [Linear](https://linear.app/) issues into GitHub pull requests by running a coding agent ([Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or [OpenAI Codex](https://github.com/openai/codex)) in a dedicated [git worktree](https://git-scm.com/docs/git-worktree) per issue.
 
 ## How it works
 
 1. You add the `agent` label to a Linear issue.
-2. Linear hits a webhook served by solto.
-3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via `gh`.
+2. Linear hits a webhook served by solto (via [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)).
+3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via [`gh`](https://cli.github.com/).
 4. The Linear issue self-narrates through comments and workflow states.
 
 Add the `yolo` label alongside `agent` to push directly to `main` instead of opening a PR.
@@ -28,59 +28,73 @@ Therefore:
 
 This is inherent to "run an LLM agent unattended on real code", not a solto-specific flaw. But the radius is real and public users of this repo should know before they deploy.
 
-## What solto needs to run (host dependencies)
+## Practical requirements
 
-On the host that runs solto:
+At a practical level, solto needs:
 
-| Dependency | Why | How installed |
-|---|---|---|
-| Linux + a dedicated user (`agent`) | Isolation; pm2 runs under this user | `bootstrap.sh` |
-| Node LTS + pnpm | Runtime + package manager | via `mise` |
-| pm2 | Keeps solto + the tunnel alive | `mise use --global npm:pm2` |
-| `git` | Worktrees, commits, pushes | apt |
-| `gh` CLI (authenticated) | `gh pr create`, `gh repo clone` | apt |
-| `jq` | Used by `add-project.sh` | apt |
-| **One of:** Claude Code CLI **or** Codex CLI (default) | The actual coding agent that runs per-issue | Claude: `curl \| bash`; Codex: `npm i -g @openai/codex` |
-| HTTPS ingress | Linear webhooks require HTTPS | Cloudflare Tunnel (recommended) |
-| Linear account with API access | Webhooks, comments, state transitions | — |
+- A Linux host with a dedicated `agent` user
+- [Node LTS](https://nodejs.org/), [pnpm](https://pnpm.io/), [pm2](https://pm2.keymetrics.io/), [git](https://git-scm.com/), [`gh`](https://cli.github.com/), and [`jq`](https://jqlang.org/)
+- One coding agent CLI: [Codex](https://github.com/openai/codex) (default) or [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)
+- Public HTTPS to `localhost:3000` for Linear webhooks. The default setup uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), but any HTTPS ingress works.
+- A [Linear](https://linear.app/) workspace and a [GitHub](https://github.com/) account that can push branches and open PRs on your target repos
 
-On a fresh Ubuntu box, `scripts/bootstrap.sh` installs everything in the "How installed" column.
+Your target repo should:
 
-## What a target project needs (repo requirements)
+- Live on GitHub
+- Have a default branch (`main` unless you override `githubBase`)
+- Have an `AGENTS.md` at the repo root with code style, test commands, dependency policy, and any "don't touch this" rules
+- Be usable non-interactively by the agent. If it needs env vars or special setup, document that in `AGENTS.md` or provide an `.env.example`
 
-For solto to open PRs against a GitHub repo, that repo must:
+## Running multiple repos with one solto instance
 
-1. **Live on GitHub** — solto clones via `gh repo clone <owner>/<repo>` and opens PRs via `gh pr create`. The `agent` user's `gh auth` must have push + PR-create permission on the repo.
-2. **Have a default branch** — `main` by default; override per-project with `githubBase` in `projects.local.json`.
-3. **Have an `AGENTS.md` at the repo root** — both Claude Code and Codex read this natively. Use it to encode the project's rules:
-   - Code style / linting / formatter
-   - Commit message conventions (solto assumes Conventional Commits; state otherwise here)
-   - How to run tests and what must pass before a PR
-   - Dependencies policy (can the agent add packages? run migrations?)
-   - Anything else you'd tell a new contributor
-4. **Be reachable to the agent** — if the repo needs env vars to build/test, drop a `.env.example` the agent can copy, or document in `AGENTS.md` what it can skip.
+The model is simple: **one solto process, many project entries**.
 
-Each target repo gets:
-- One entry in `projects.local.json` (id + `githubRepo`).
-- One Linear webhook pointing at `https://<your-host>/webhook/<id>`.
-- One `<ID>_LINEAR_SECRET` entry in `.env`.
-- Two Linear labels: `agent` (required trigger) and optionally `yolo` (push-to-main instead of PR).
+You do **not** run one copy of solto per repo. Keep a single `~/solto` install and register each target repo in `projects.local.json`. solto routes webhooks by project id, and each project gets its own clone under `repos/<id>/` and worktrees under `workers/<id>/`.
+
+Example:
+
+```json
+[
+  {
+    "id": "app-api",
+    "githubRepo": "your-org/app-api",
+    "githubBase": "main",
+    "maxParallel": 2
+  },
+  {
+    "id": "marketing-site",
+    "githubRepo": "your-org/marketing-site",
+    "githubBase": "main",
+    "maxParallel": 1
+  },
+  {
+    "id": "internal-admin",
+    "githubRepo": "your-org/internal-admin",
+    "githubBase": "develop",
+    "maxParallel": 3
+  }
+]
+```
+
+For each repo:
+
+1. Add one object to `projects.local.json`.
+2. Run `./scripts/add-project.sh <id>`.
+3. Create one Linear webhook at `https://<your-host>/webhook/<id>`.
+4. Paste that webhook's signing secret into `.env` as `<ID>_LINEAR_SECRET`.
+5. Restart solto with `pm2 restart solto`.
+
+`./scripts/add-project.sh` clones the repo, creates the worker directory, and appends the matching `<ID>_LINEAR_SECRET=` placeholder to `.env` if needed.
+
+The main per-project knobs in `projects.local.json` are:
+
+- `githubBase`: branch to work from
+- `maxParallel`: concurrent jobs for that repo
+- `maxPerHour` / `maxPerDay`: rate limits for that repo
 
 ## Install
 
-See [`SETUP.md`](./SETUP.md) for the step-by-step. TL;DR:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
-sudo su - agent
-gh auth login
-git clone https://github.com/mohbreu/solto.git ~/solto && cd ~/solto
-pnpm install
-cp .env.example .env && cp projects.local.json.example projects.local.json
-# edit both, then:
-for id in $(jq -r '.[].id' projects.local.json); do ./scripts/add-project.sh "$id"; done
-pm2 start ecosystem.config.cjs && pm2 save
-```
+Use [SETUP.md](./SETUP.md) for the full install and operations guide. On a fresh Ubuntu host, `scripts/bootstrap.sh` installs the base dependencies; after that you clone solto, fill in `.env` and `projects.local.json`, run `./scripts/add-project.sh` for each project, and start `pm2`.
 
 ## License
 
