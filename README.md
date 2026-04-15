@@ -115,6 +115,16 @@ curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?inc
 
 `/status` includes live per-project job counts, recent persisted jobs, bounded pm2 stats, and a response timestamp. Add `?include=logs` for a compact log tail, and `tail=<n>` to control its size.
 
+## Demo
+
+<p align="center">
+  <video src="https://gist.github.com/user-attachments/assets/6c7cc647-b8b5-4eb3-982d-ee26bd6624c0" controls muted playsinline></video>
+</p>
+
+<p align="center">
+  <small>quick demo of how to manage a GitHub repository via Linear with solto</small>
+</p>
+
 ## License
 
 ISC
