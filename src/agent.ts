@@ -19,6 +19,7 @@ import type { ProjectConfig } from "./projects.js";
 import { redactSecrets } from "./redact.js";
 import { getJobState, saveJobState } from "./run-state.js";
 import { CODER_DISPLAY_NAMES, runCoder } from "./runners.js";
+import { assessTaskProfile, type TaskProfile } from "./task-profile.js";
 
 interface RunAgentOptions {
   direct?: boolean;
@@ -43,6 +44,10 @@ export async function runAgent(
   const initialRunState = await getJobState(issue.id).catch(() => null);
   const startedAt = initialRunState?.startedAt ?? new Date().toISOString();
   const mode = opts.direct ? "direct" : isIteration ? "iteration" : "pr";
+  const taskProfile = assessTaskProfile(issue, {
+    followUpInstruction: opts.followUpInstruction,
+    existingPrUrl: opts.existingPr?.prUrl,
+  });
   let terminalState:
     | { status: "succeeded" | "direct" | "no_changes" | "failed"; prUrl?: string; error?: string }
     | null = null;
@@ -80,8 +85,13 @@ export async function runAgent(
         summaryFile,
         followUpInstruction: opts.followUpInstruction,
         existingPrUrl: opts.existingPr?.prUrl,
+        taskProfile,
       }),
-      worktree
+      worktree,
+      {
+        preferClaude: taskProfile.preferClaude,
+        aggressiveDelegation: taskProfile.aggressiveDelegation,
+      }
     );
     await postLinearComment(issue.id, `${CODER_DISPLAY_NAMES[coder]} finished.`);
 
@@ -411,6 +421,7 @@ function buildPrompt(
     summaryFile: string;
     followUpInstruction?: string;
     existingPrUrl?: string;
+    taskProfile: TaskProfile;
   }
 ): string {
   const followUpBlock = opts.followUpInstruction?.trim()
@@ -448,6 +459,18 @@ ${opts.existingPrUrl}
 - Focus on what changed and why it matters to the user
 - Do not include diff stats, file lists, ticket IDs, or PR links
 - If the task ends up making no meaningful changes, still write a short note saying so`;
+  const delegationBlock = opts.taskProfile.aggressiveDelegation
+    ? `Delegation:
+- This task looks broad enough to justify parallel work.
+- If your runtime supports delegation or subagents, use them early for
+  independent research, isolated implementation slices, and review.
+- Keep one main integration path in this same worktree and branch.
+- Do not create extra branches or PRs.`
+    : `Delegation:
+- Keep this mostly single-threaded.
+- If your runtime supports delegation or subagents, only use them for
+  clearly independent research or a tightly bounded side task.
+- Keep the final result integrated in this same worktree and branch.`;
 
   return `
 You are an autonomous software agent working on a real codebase.
@@ -462,10 +485,8 @@ ${followUpBlock}${existingPrBlock}Instructions:
 - Read AGENTS.md at the repo root FIRST and follow every rule in it
   (style, commit format, attribution, dependency policy, workflow). It
   takes precedence over your defaults.
-- If your runtime supports delegation or subagents, proactively use them
-  for independent research, bounded implementation slices, or review.
-  Keep the final result integrated in this same worktree and branch.
-  Do not create extra branches or PRs.
+- Task complexity: ${opts.taskProfile.complexity}
+- Complexity signals: ${opts.taskProfile.signals.join(", ") || "none"}
 - Follow existing code conventions in the repo
 - Run the test suite if one exists and fix any failures you introduce
 - Only modify files directly relevant to this task
@@ -474,6 +495,7 @@ ${followUpBlock}${existingPrBlock}Instructions:
   (Conventional Commits, imperative mood, no self-attribution). Do NOT
   push; solto handles pushing and PR creation.
 
+${delegationBlock}
 ${prMetadataBlock}
 ${completionSummaryBlock}
 `.trim();

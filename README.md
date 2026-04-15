@@ -51,7 +51,7 @@ The lightweight test suite covers local state persistence plus a few pure status
 5. When the PR is merged, GitHub calls back into solto and the Linear issue moves to `Done`.
 6. The Linear issue self-narrates through comments and workflow states.
 
-When `CODER=claude`, solto enables a small default set of Claude subagents for research, bounded implementation, and review. The main agent still owns the final branch and PR.
+When `CODER=claude`, solto enables Claude subagents for research, bounded implementation, and review. For broader tasks, solto now pushes Claude into a more aggressive delegation mode. If you set `CODER=auto`, solto prefers Claude for more complex parallelizable work when `ANTHROPIC_API_KEY` is present, and otherwise falls back to Codex.
 
 An issue starts when it ends up both:
 

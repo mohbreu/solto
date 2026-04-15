@@ -179,7 +179,7 @@ solto only forwards `OPENAI_API_KEY` if it's set, so leaving it empty defers to 
 
 **Claude Code**: set `CODER=claude` in `.env` and `ANTHROPIC_API_KEY=<your key>`. Optionally run `claude` once interactively to authenticate.
 
-When `CODER=claude`, solto also passes a small generic `--agents` set to Claude Code so it can delegate research, bounded implementation, and review work inside the same run. Set `CLAUDE_ENABLE_SUBAGENTS=0` in `.env` if you want to disable that.
+When `CODER=claude`, solto passes a Claude `--agents` set so the run can delegate research, bounded implementation, and review work inside the same run. For broader tasks and PR follow-ups, solto automatically strengthens those delegation instructions and switches Claude into a more aggressive subagent mode. If you set `CODER=auto`, solto prefers Claude for more complex parallelizable tasks when `ANTHROPIC_API_KEY` is present, and otherwise falls back to Codex. Set `CLAUDE_ENABLE_SUBAGENTS=0` in `.env` if you want to disable Claude subagents entirely.
 
 Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
@@ -271,9 +271,10 @@ curl https://<your-webhook-host>/health                 # → ok (via tunnel)
 
 | Var | Purpose |
 |---|---|
-| `CODER` | `codex` (default) or `claude` |
+| `CODER` | `codex` (default), `claude`, or `auto` |
 | `ANTHROPIC_API_KEY` | Headless Claude Code CLI (when `CODER=claude`) |
 | `CLAUDE_ENABLE_SUBAGENTS` | Optional. `1` by default when `CODER=claude`; set `0` / `false` / `no` to disable Claude subagents |
+| `CLAUDE_SUBAGENT_MODE` | Optional. `auto` by default. `standard` keeps the lighter subagent set, `aggressive` always pushes stronger parallel delegation, `off` disables `--agents` |
 | `OPENAI_API_KEY` | Codex CLI (when `CODER=codex`). Leave empty to use `codex login` session |
 | `LINEAR_API_KEY` | Linear personal API key for comments + state updates |
 | `GITHUB_WEBHOOK_SECRET` | Shared GitHub webhook secret for merged PR callbacks |
