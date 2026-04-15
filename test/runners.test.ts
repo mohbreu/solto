@@ -48,6 +48,8 @@ test("planCoderRun reports claude subagent mode", () => {
   try {
     assert.deepEqual(planCoderRun({ aggressiveDelegation: true }), {
       coder: "claude",
+      model: "claude-sonnet-4-5",
+      version: "unknown",
       claudeSubagentMode: "standard",
     });
   } finally {
@@ -59,5 +61,25 @@ test("planCoderRun reports claude subagent mode", () => {
     else process.env.CLAUDE_SUBAGENT_MODE = previousMode;
     if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = previousKey;
+  }
+});
+
+test("planCoderRun reports codex as not pinned when no model is configured", () => {
+  const previousCoder = process.env.CODER;
+  const previousModel = process.env.CODEX_MODEL;
+  process.env.CODER = "codex";
+  delete process.env.CODEX_MODEL;
+  try {
+    assert.deepEqual(planCoderRun(), {
+      coder: "codex",
+      model: "not pinned",
+      version: "unknown",
+      claudeSubagentMode: "off",
+    });
+  } finally {
+    if (previousCoder === undefined) delete process.env.CODER;
+    else process.env.CODER = previousCoder;
+    if (previousModel === undefined) delete process.env.CODEX_MODEL;
+    else process.env.CODEX_MODEL = previousModel;
   }
 });

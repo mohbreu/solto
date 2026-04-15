@@ -23,7 +23,12 @@ import {
   parseAgentRunMetadata,
 } from "./run-metadata.js";
 import { getJobState, saveJobState } from "./run-state.js";
-import { CODER_DISPLAY_NAMES, planCoderRun, runCoder } from "./runners.js";
+import {
+  CODER_DISPLAY_NAMES,
+  enrichRunPlan,
+  planCoderRun,
+  runCoder,
+} from "./runners.js";
 import { assessTaskProfile, type TaskProfile } from "./task-profile.js";
 
 interface RunAgentOptions {
@@ -54,10 +59,10 @@ export async function runAgent(
     followUpInstruction: opts.followUpInstruction,
     existingPrUrl: opts.existingPr?.prUrl,
   });
-  const runPlan = planCoderRun({
+  const runPlan = await enrichRunPlan(planCoderRun({
     preferClaude: taskProfile.preferClaude,
     aggressiveDelegation: taskProfile.aggressiveDelegation,
-  });
+  }));
   let terminalState:
     | { status: "succeeded" | "direct" | "no_changes" | "failed"; prUrl?: string; error?: string }
     | null = null;
@@ -90,6 +95,7 @@ export async function runAgent(
 
     await postLinearComment(issue.id, buildRunStartedComment(runPlan));
     const completedPlan = await runCoder(
+      runPlan,
       buildPrompt(issue, type, {
         prFile,
         summaryFile,
@@ -98,19 +104,18 @@ export async function runAgent(
         existingPrUrl: opts.existingPr?.prUrl,
         taskProfile,
       }),
-      worktree,
-      {
-        preferClaude: taskProfile.preferClaude,
-        aggressiveDelegation: taskProfile.aggressiveDelegation,
-      }
+      worktree
     );
     await postLinearComment(
       issue.id,
       `${CODER_DISPLAY_NAMES[completedPlan.coder]} finished. Running final summary.`
     );
 
-    const diff = await exec("git", [
+    const diffStat = await exec("git", [
       "-C", worktree, "diff", "--stat", `origin/${base}`,
+    ]).catch(() => "");
+    const diffPatch = await exec("git", [
+      "-C", worktree, "diff", "--no-ext-diff", `origin/${base}`,
     ]).catch(() => "");
     const changedFiles = await exec("git", [
       "-C", worktree, "diff", "--name-only", `origin/${base}`,
@@ -118,7 +123,7 @@ export async function runAgent(
     const numstat = await exec("git", [
       "-C", worktree, "diff", "--numstat", `origin/${base}`,
     ]).catch(() => "");
-    const hasChanges = diff.trim().length > 0;
+    const hasChanges = diffStat.trim().length > 0;
     const agentSummary = await readFile(summaryFile, "utf8").catch(() => "");
     const metadata = parseAgentRunMetadata(
       await readFile(metadataFile, "utf8").catch(() => "")
@@ -185,7 +190,7 @@ export async function runAgent(
       terminalState = { status: "direct" };
       await postLinearComment(
         issue.id,
-        `Done. Pushed directly to ${base} (yolo).\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
+        `Done. Pushed directly to ${base} (yolo).\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diffPatch.trim()}\n\`\`\``
       );
       await setIssueState(issue.id, issue.teamId, STATE_DONE);
       await deletePullRequestState(issue.id);
@@ -227,7 +232,7 @@ export async function runAgent(
       terminalState = { status: "succeeded", prUrl };
       await postLinearComment(
         issue.id,
-        `Done. Updated PR: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
+        `Done. Updated PR: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diffPatch.trim()}\n\`\`\``
       );
       await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -281,7 +286,7 @@ export async function runAgent(
     terminalState = { status: "succeeded", prUrl };
     await postLinearComment(
       issue.id,
-      `Done. PR opened: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
+      `Done. PR opened: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diffPatch.trim()}\n\`\`\``
     );
     await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -353,14 +358,14 @@ export async function runAgent(
 }
 
 function buildRunStartedComment(
-  plan: ReturnType<typeof planCoderRun>
+  plan: Awaited<ReturnType<typeof enrichRunPlan>>
 ): string {
   if (plan.coder === "claude") {
     return plan.claudeSubagentMode === "off"
-      ? "Workspace ready. Running Claude Code without subagents."
-      : `Workspace ready. Running Claude Code with ${plan.claudeSubagentMode} subagent mode.`;
+      ? `Workspace ready. Running Claude Code ${plan.version} on model ${plan.model} without subagents.`
+      : `Workspace ready. Running Claude Code ${plan.version} on model ${plan.model} with ${plan.claudeSubagentMode} subagent mode.`;
   }
-  return "Workspace ready. Running Codex.";
+  return `Workspace ready. Running Codex ${plan.version} on model ${plan.model}.`;
 }
 
 function summarizeDiff(

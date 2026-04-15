@@ -23,7 +23,12 @@ test("parseAgentRunMetadata reads subagent and review details", () => {
 
 test("formatExecutionSummary renders coder, subagents, and review", () => {
   const summary = formatExecutionSummary(
-    { coder: "claude", claudeSubagentMode: "aggressive" },
+    {
+      coder: "claude",
+      claudeSubagentMode: "aggressive",
+      model: "claude-sonnet-4-5",
+      version: "1.2.3",
+    },
     {
       subagentsUsed: true,
       subagentCount: 2,
@@ -33,6 +38,8 @@ test("formatExecutionSummary renders coder, subagents, and review", () => {
   );
 
   assert.match(summary, /Coder: Claude Code/);
+  assert.match(summary, /Model: claude-sonnet-4-5/);
+  assert.match(summary, /Version: 1.2.3/);
   assert.match(summary, /Claude subagent mode: aggressive/);
   assert.match(summary, /Subagents used: 2/);
   assert.match(summary, /Final review: completed/);
