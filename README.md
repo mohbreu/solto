@@ -95,14 +95,6 @@ For follow-up changes on an existing PR, comment with the bot mention, usually `
 > [!WARNING]
 > solto runs a coding agent with `--dangerously-skip-permissions` (Claude Code) / `--dangerously-bypass-approvals-and-sandbox` (Codex) on attacker-influenceable input. Treat assigning an issue to the bot user as **shell access to the host**.
 
-- Issue title and description go straight into the agent prompt, so prompt injection is real.
-- The agent can read and write the repo, use authenticated `gh`, and do whatever the `agent` OS user can do.
-- solto does not forward unrelated webhook secrets to agent runs, but anything the OS user can reach is still in scope.
-
-- Only let trusted people assign issues to the bot user.
-- Run solto on a dedicated host or at least a locked-down OS user with no unrelated secrets.
-- The `agent` user created by `bootstrap.sh` has no sudo access. Keep it that way.
-
 ## Requirements
 
 - A Linux Host With a Dedicated `agent` User.

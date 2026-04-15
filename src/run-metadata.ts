@@ -10,6 +10,8 @@ export interface AgentRunMetadata {
 export interface RunPlanSummary {
   coder: Coder;
   claudeSubagentMode: "off" | "standard" | "aggressive";
+  model: string;
+  version: string;
 }
 
 export function parseAgentRunMetadata(raw: string): AgentRunMetadata | null {
@@ -54,7 +56,12 @@ export function formatExecutionSummary(
   plan: RunPlanSummary,
   metadata: AgentRunMetadata | null
 ): string {
-  const lines = [`Execution:`, `- Coder: ${displayCoder(plan.coder)}`];
+  const lines = [
+    `Execution:`,
+    `- Coder: ${displayCoder(plan.coder)}`,
+    `- Model: ${plan.model}`,
+    `- Version: ${plan.version}`,
+  ];
 
   if (plan.coder === "claude") {
     lines.push(`- Claude subagent mode: ${plan.claudeSubagentMode}`);

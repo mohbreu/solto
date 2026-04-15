@@ -12,9 +12,15 @@ interface RunCoderOptions {
 export interface CoderRunPlan {
   coder: Coder;
   claudeSubagentMode: ClaudeSubagentMode;
+  model: string;
+  version: string;
 }
 
 const AGENT_TIMEOUT_MS = Number(process.env.AGENT_TIMEOUT_MS ?? 20 * 60 * 1000);
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-5";
+const CONFIGURED_CODEX_MODEL = process.env.CODEX_MODEL?.trim() || null;
+const CODEX_MODEL_LABEL = CONFIGURED_CODEX_MODEL || "not pinned";
+const versionCache = new Map<Coder, Promise<string>>();
 
 export function normalizeConfiguredCoder(
   value: string | undefined
@@ -112,8 +118,11 @@ export function getCoder(opts: RunCoderOptions = {}): Coder {
 
 export function planCoderRun(opts: RunCoderOptions = {}): CoderRunPlan {
   const coder = getCoder(opts);
+  const model = coder === "claude" ? CLAUDE_MODEL : CODEX_MODEL_LABEL;
   return {
     coder,
+    model,
+    version: "unknown",
     claudeSubagentMode: coder === "claude"
       ? resolveClaudeSubagentMode(
           process.env.CLAUDE_SUBAGENT_MODE,
@@ -123,14 +132,20 @@ export function planCoderRun(opts: RunCoderOptions = {}): CoderRunPlan {
   };
 }
 
+export async function enrichRunPlan(plan: CoderRunPlan): Promise<CoderRunPlan> {
+  return {
+    ...plan,
+    version: await getCoderVersion(plan.coder),
+  };
+}
+
 export async function runCoder(
+  plan: CoderRunPlan,
   prompt: string,
   cwd: string,
-  opts: RunCoderOptions = {}
 ): Promise<CoderRunPlan> {
-  const plan = planCoderRun(opts);
   if (plan.coder === "codex") await runCodex(prompt, cwd);
-  else await runClaude(prompt, cwd, opts, plan.claudeSubagentMode);
+  else await runClaude(prompt, cwd, plan.claudeSubagentMode);
   return plan;
 }
 
@@ -151,7 +166,6 @@ function baseEnv(): NodeJS.ProcessEnv {
 async function runClaude(
   prompt: string,
   cwd: string,
-  opts: RunCoderOptions,
   subagentMode: ClaudeSubagentMode
 ): Promise<void> {
   const env = baseEnv();
@@ -160,7 +174,7 @@ async function runClaude(
   }
   const args = [
     "--dangerously-skip-permissions",
-    "--model", "claude-sonnet-4-5",
+    "--model", CLAUDE_MODEL,
     "--max-turns", "30",
   ];
   if (subagentMode !== "off") {
@@ -181,13 +195,34 @@ async function runCodex(prompt: string, cwd: string): Promise<void> {
   if (process.env.OPENAI_API_KEY) {
     env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   }
+  const args = [
+    "exec",
+    "--dangerously-bypass-approvals-and-sandbox",
+  ];
+  if (CONFIGURED_CODEX_MODEL) {
+    args.push("--model", CONFIGURED_CODEX_MODEL);
+  }
+  args.push(prompt);
   await exec(
     "codex",
-    [
-      "exec",
-      "--dangerously-bypass-approvals-and-sandbox",
-      prompt,
-    ],
+    args,
     { cwd, env, timeoutMs: AGENT_TIMEOUT_MS }
   );
+}
+
+async function getCoderVersion(coder: Coder): Promise<string> {
+  let pending = versionCache.get(coder);
+  if (!pending) {
+    pending = readCoderVersion(coder).catch(() => "unknown");
+    versionCache.set(coder, pending);
+  }
+  return await pending;
+}
+
+async function readCoderVersion(coder: Coder): Promise<string> {
+  const raw = coder === "claude"
+    ? await exec("claude", ["--version"], { env: baseEnv() })
+    : await exec("codex", ["--version"], { env: baseEnv() });
+  const cleaned = raw.replace(/\r\n/g, "\n").trim().split("\n")[0]?.trim();
+  return cleaned || "unknown";
 }
