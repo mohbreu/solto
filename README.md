@@ -6,7 +6,7 @@ Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issue
 
 ## Install
 
-Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
+Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear and GitHub webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
 
 Fast path on a fresh Ubuntu host:
 
@@ -38,7 +38,8 @@ The lightweight test suite covers local state persistence plus a few pure status
 2. Linear hits a webhook served by solto (via [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)).
 3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via [`gh`](https://cli.github.com/).
 4. If solto already opened a PR for that issue, a later Linear comment that starts with `@solto-bot` updates the same PR branch.
-5. The Linear issue self-narrates through comments and workflow states.
+5. When the PR is merged, GitHub calls back into solto and the Linear issue moves to `Done`.
+6. The Linear issue self-narrates through comments and workflow states.
 
 When `CODER=claude`, solto enables a small default set of Claude subagents for research, bounded implementation, and review. The main agent still owns the final branch and PR.
 
@@ -94,7 +95,7 @@ Your target repo should:
 
 ## Running Multiple Repos
 
-Use one `solto` instance for many repos. Add each target repo to `projects.local.json`, run `./scripts/add-project.sh <id>`, create one Linear webhook per project id, add the matching `<ID>_LINEAR_SECRET` to `.env`, and restart `solto`.
+Use one `solto` instance for many repos. Add each target repo to `projects.local.json`, run `./scripts/add-project.sh <id>`, create one Linear webhook per project id, add the matching `<ID>_LINEAR_SECRET` to `.env`, create one GitHub `pull_request` webhook per repo pointing at `/github-webhook`, and restart `solto`.
 
 Each project gets:
 

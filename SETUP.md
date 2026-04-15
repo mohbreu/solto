@@ -37,6 +37,7 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 |---|---|
 | [GitHub](https://github.com/) (for the `agent` user) | `gh auth login`, with push + PR-create on target repos |
 | [Linear](https://linear.app/) workspace | Personal API key (`LINEAR_API_KEY`) + one webhook per project with its signing secret |
+| [GitHub](https://github.com/) target repos | One `pull_request` webhook per repo using `GITHUB_WEBHOOK_SECRET` so merged PRs can move issues to Done |
 | [Anthropic API](https://console.anthropic.com/) key *or* [Claude subscription](https://www.anthropic.com/pricing#claude-code) | If `CODER=claude` |
 | [OpenAI API](https://platform.openai.com/) key *or* [ChatGPT subscription](https://openai.com/chatgpt/pricing/) (`codex login`) | If `CODER=codex` (default) |
 | A [Cloudflare](https://www.cloudflare.com/)-managed domain | For the Cloudflare Tunnel hostname |
@@ -129,12 +130,13 @@ It intentionally does not try to automate the interactive or environment-specifi
 - editing `projects.local.json`
 - Cloudflare Tunnel login and DNS setup
 - Linear webhook creation
+- GitHub webhook creation
 
 After the installer finishes, continue with:
 
 1. [Authenticate the coder](#4-authenticate-the-coder)
 2. [Set up public HTTPS](#5-set-up-public-https-cloudflare-tunnel)
-3. [Create Linear webhooks](#6-create-linear-webhooks-per-project)
+3. [Create webhooks](#6-create-webhooks)
 4. [Start solto](#7-start-solto)
 
 ### 2. Manual path: bootstrap only
@@ -212,17 +214,28 @@ cloudflared tunnel run solto-tunnel
 # Ctrl+C once you see it connect; pm2 will manage it from here
 ```
 
-### 6. Create Linear webhooks (per project)
+### 6. Create webhooks
 
-For each project in `projects.local.json`:
+Set one shared GitHub webhook secret in `.env` first:
+
+```bash
+GITHUB_WEBHOOK_SECRET=<random-secret>
+```
+
+Then, for each project in `projects.local.json`:
 
 1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`. Best practice: generate this key from a dedicated automation user such as `solto-bot`, not from your personal Linear account.
-2. **Webhook**: Linear → Settings → API → Webhooks → New webhook.
+2. **Linear webhook**: Linear → Settings → API → Webhooks → New webhook.
    - URL: `https://<your-webhook-host>/webhook/<project-id>`
    - Resource types: **Issues** and **Comments**
    - Team: the team that owns the project
    - Copy the signing secret → `.env` as `<PROJECT_ID>_LINEAR_SECRET` (UPPER_SNAKE_CASE form of the id).
-3. **Workflow setup**:
+3. **GitHub webhook**: GitHub repo → Settings → Webhooks → Add webhook.
+   - Payload URL: `https://<your-webhook-host>/github-webhook`
+   - Content type: `application/json`
+   - Secret: the shared `GITHUB_WEBHOOK_SECRET`
+   - Event: **Pull requests**
+4. **Workflow setup**:
    - assign work to your bot user, for example `solto-bot`
    - keep issues in `Todo` / `To do` when you want them to start
    - `yolo` is optional and pushes directly to `main` instead of opening a PR
@@ -253,6 +266,7 @@ curl https://<your-webhook-host>/health                 # → ok (via tunnel)
 | `CLAUDE_ENABLE_SUBAGENTS` | Optional. `1` by default when `CODER=claude`; set `0` / `false` / `no` to disable Claude subagents |
 | `OPENAI_API_KEY` | Codex CLI (when `CODER=codex`). Leave empty to use `codex login` session |
 | `LINEAR_API_KEY` | Linear personal API key for comments + state updates |
+| `GITHUB_WEBHOOK_SECRET` | Shared GitHub webhook secret for merged PR callbacks |
 | `LINEAR_BOT_MENTION` | Optional override for the bot mention alias used in follow-up comments |
 | `<PROJECT>_LINEAR_SECRET` | Webhook signing secret per project (e.g. `MY_PROJECT_LINEAR_SECRET`) |
 | `STATUS_TOKEN` | Random token gating the `/status` endpoint |
@@ -265,7 +279,7 @@ curl https://<your-webhook-host>/health                 # → ok (via tunnel)
 # 1. Edit projects.local.json and add a new entry with id + githubRepo
 # 2. Scaffold local state
 ./scripts/add-project.sh <new-id>
-# 3. Create a Linear webhook, paste the secret into .env
+# 3. Create the Linear webhook and the repo's GitHub pull_request webhook
 # 4. Reload
 pm2 restart solto
 ```
@@ -279,7 +293,8 @@ Get the issue assigned to the bot user and into `Todo` / `To do`. The order does
 3. Runs the selected coder headlessly
 4. Commits + pushes a feature branch
 5. Opens a PR via `gh pr create`, posts the URL, sets state → **In Review**
-6. Cleans up the worktree
+6. When GitHub later reports that the PR was merged, solto posts a follow-up comment and sets the issue → **Done**
+7. Cleans up the worktree
 
 If `yolo` is also present: pushes directly to `main`, sets state → **Done**. On failure / no-changes: comments the error, sets state → **Todo**.
 

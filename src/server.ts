@@ -6,16 +6,26 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { runAgent } from "./agent.js";
 import {
+  type GitHubPullRequestWebhook,
+  verifyGitHubWebhook,
+} from "./github.js";
+import {
   getIssueById,
   getViewer,
   getViewerId,
   postLinearComment,
+  setIssueState,
+  STATE_DONE,
   STATE_TODO,
   type LinearComment,
   verifyLinearWebhook,
   type LinearIssue,
 } from "./linear.js";
-import { getPullRequestState } from "./pr-state.js";
+import {
+  deletePullRequestState,
+  findPullRequestStateByUrl,
+  getPullRequestState,
+} from "./pr-state.js";
 import { PROJECTS } from "./projects.js";
 import {
   listRecentJobStates,
@@ -288,6 +298,14 @@ function tokensMatch(provided: string | undefined, expected: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
+function findProjectByRepo(fullName: string | undefined) {
+  if (!fullName) return null;
+  const normalized = fullName.toLowerCase();
+  return Object.values(PROJECTS).find(
+    (project) => project.githubRepo.toLowerCase() === normalized
+  ) ?? null;
+}
+
 const app = new Hono();
 
 const pools = new Map(
@@ -442,6 +460,70 @@ app.post("/webhook/:projectId", async (c) => {
   return c.text("OK");
 });
 
+app.post("/github-webhook", async (c) => {
+  const secret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+  if (!secret) {
+    console.log("[github-webhook] ignored (GITHUB_WEBHOOK_SECRET is unset)");
+    return c.text("Not configured", 503);
+  }
+
+  const raw = await c.req.text();
+  const signature = c.req.header("x-hub-signature-256") ?? null;
+  if (!verifyGitHubWebhook(signature, raw, secret)) {
+    console.log("[github-webhook] signature verification FAILED");
+    return c.text("Unauthorized", 401);
+  }
+
+  const event = c.req.header("x-github-event") ?? "";
+  if (event !== "pull_request") {
+    console.log(`[github-webhook] ignored (event=${event || "unknown"})`);
+    return c.text("OK");
+  }
+
+  const body = JSON.parse(raw) as GitHubPullRequestWebhook;
+  const project = findProjectByRepo(body.repository?.full_name);
+  const prUrl = body.pull_request?.html_url;
+  console.log(
+    `[github-webhook] event=${event} action=${body.action ?? "unknown"} repo=${body.repository?.full_name ?? "unknown"} pr=${prUrl ?? "unknown"}`
+  );
+
+  if (body.action !== "closed" || body.pull_request?.merged !== true || !prUrl) {
+    console.log("[github-webhook] ignored (not a merged pull request)");
+    return c.text("OK");
+  }
+  if (!project) {
+    console.log("[github-webhook] ignored (repo not managed by solto)");
+    return c.text("OK");
+  }
+
+  const prState = await findPullRequestStateByUrl(prUrl);
+  if (!prState || prState.projectId !== project.id) {
+    console.log(`[github-webhook] ignored (no matching solto PR state for ${prUrl})`);
+    return c.text("OK");
+  }
+
+  const issue = await getIssueById(prState.issueId).catch((err) => {
+    console.error(`[github-webhook] failed to fetch issue ${prState.issueId}:`, err);
+    return null;
+  });
+  if (!issue) {
+    console.log(`[github-webhook] ignored (issue lookup failed for ${prState.issueId})`);
+    return c.text("OK");
+  }
+
+  await postLinearComment(
+    issue.id,
+    `PR merged: ${prUrl}\n\nMarking the Linear issue as Done.`
+  ).catch((err) => {
+    console.error(`[github-webhook] failed to post merge comment for ${issue.id}:`, err);
+  });
+  await setIssueState(issue.id, issue.teamId, STATE_DONE);
+  await deletePullRequestState(issue.id);
+
+  console.log(`[github-webhook] marked ${issue.id} done after merge: ${prUrl}`);
+  return c.text("OK");
+});
+
 async function acceptRun(
   projectId: string,
   project: (typeof PROJECTS)[string],
@@ -563,6 +645,7 @@ async function main(): Promise<void> {
     Object.keys(PROJECTS).forEach((id) => {
       console.log(`  POST /webhook/${id}`);
     });
+    console.log("  POST /github-webhook");
     console.log("  GET  /status  (x-status-token header required)");
     console.log("  GET  /health");
   });

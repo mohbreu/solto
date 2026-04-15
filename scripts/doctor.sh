@@ -175,6 +175,12 @@ else
     fail "LINEAR_API_KEY missing"
 fi
 
+if env_has GITHUB_WEBHOOK_SECRET; then
+    pass "GITHUB_WEBHOOK_SECRET configured"
+else
+    fail "GITHUB_WEBHOOK_SECRET missing"
+fi
+
 if env_has STATUS_TOKEN; then
     pass "STATUS_TOKEN configured"
 else
@@ -301,7 +307,7 @@ if pm2 jlist > "$PM2_JSON_FILE" 2>/dev/null; then
         else
             fail "solto pm2 cwd is $solto_cwd, expected $ROOT"
         fi
-        for key in CODER LINEAR_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY STATUS_TOKEN LINEAR_BOT_MENTION TUNNEL_NAME; do
+        for key in CODER LINEAR_API_KEY GITHUB_WEBHOOK_SECRET OPENAI_API_KEY ANTHROPIC_API_KEY STATUS_TOKEN LINEAR_BOT_MENTION TUNNEL_NAME; do
             compare_pm2_env "$key"
         done
         for project_id in "${PROJECT_IDS[@]}"; do

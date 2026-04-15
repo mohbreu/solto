@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,4 +42,26 @@ export async function savePullRequestState(
 
 export async function deletePullRequestState(issueId: string): Promise<void> {
   await rm(statePathFor(issueId), { force: true }).catch(() => {});
+}
+
+export async function findPullRequestStateByUrl(
+  prUrl: string
+): Promise<PullRequestState | null> {
+  await mkdir(STATE_DIR, { recursive: true });
+  const names = await readdir(STATE_DIR).catch(() => [] as string[]);
+
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+
+    const raw = await readFile(resolve(STATE_DIR, name), "utf8").catch(() => "");
+    if (!raw.trim()) continue;
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+    const entry = parsed as PullRequestState;
+    if (entry.prUrl === prUrl) return entry;
+  }
+
+  return null;
 }
