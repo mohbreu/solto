@@ -25,7 +25,9 @@ import {
   deletePullRequestState,
   findPullRequestStateByUrl,
   getPullRequestState,
+  savePullRequestState,
 } from "./pr-state.js";
+import { recoverPullRequestState } from "./pr-recovery.js";
 import { PROJECTS } from "./projects.js";
 import {
   listRecentJobStates,
@@ -263,6 +265,9 @@ async function getAssignmentTriggerIssue(
     return { issue: null, reason: "unable to resolve bot user" };
   }
 
+  const existingPr = await getPullRequestState(issue.id).catch(() => null);
+  const hasExistingPr = existingPr?.projectId === projectId;
+
   if (issue.assigneeId !== viewerId) {
     const touchedAssigneeOrState = action === "update" && updateTouchedAssigneeOrState(updatedFrom);
     return {
@@ -278,7 +283,9 @@ async function getAssignmentTriggerIssue(
     return {
       issue: null,
       reason: `state is not todo: ${issue.stateName ?? "unknown"}`,
-      feedback: `Ignored: this issue is assigned to the bot user, but its current state is ${issue.stateName ?? "unknown"}. Move it to Todo / To do to start work.`,
+      feedback: hasExistingPr
+        ? undefined
+        : `Ignored: this issue is assigned to the bot user, but its current state is ${issue.stateName ?? "unknown"}. Move it to Todo / To do to start work.`,
     };
   }
 
@@ -444,7 +451,37 @@ app.post("/webhook/:projectId", async (c) => {
       return c.text("OK");
     }
 
-    const existingPr = await getPullRequestState(issueId);
+    let existingPr = await getPullRequestState(issueId);
+    if (!existingPr) {
+      const issue = await getIssueById(issueId).catch((err) => {
+        console.error(`[webhook] failed to fetch issue details for ${projectId}/${issueId}:`, err);
+        return null;
+      });
+      if (!issue) {
+        console.log(`[webhook] ignored comment (issue lookup failed for ${issueId})`);
+        return c.text("OK");
+      }
+      if (!issueIsValid(issue)) {
+        console.log(`[webhook] rejected malformed issue from comment lookup: ${issue.id}/${issue.identifier}`);
+        return c.text("Bad Request", 400);
+      }
+
+      const recoveredPr = await recoverPullRequestState(
+        issue.id,
+        issue.identifier,
+        projectId,
+        project.githubRepo
+      );
+      if (recoveredPr) {
+        await savePullRequestState(recoveredPr).catch((err) => {
+          console.error(`[webhook] failed to persist recovered PR state for ${projectId}/${issueId}:`, err);
+        });
+        existingPr = recoveredPr;
+        console.log(
+          `[webhook] recovered missing PR state for ${projectId}/${issueId}: ${recoveredPr.prUrl}`
+        );
+      }
+    }
     if (!existingPr || existingPr.projectId !== projectId) {
       console.log(`[webhook] ignored comment (no existing solto PR for issue ${issueId})`);
       await postLinearComment(
