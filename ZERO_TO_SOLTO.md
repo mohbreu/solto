@@ -2,8 +2,6 @@
 
 Reference for installing and operating solto on your own Linux host. Paths assume Ubuntu 24.04 on the `agent` user, but anything Linux + [systemd](https://systemd.io/) / [pm2](https://pm2.keymetrics.io/) should work.
 
-> **Before installing, read [README.md § Trust model](./README.md#-trust-model-read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can assign an issue to the bot user has what is effectively shell access to your host.
-
 ## Installing on a New Machine
 
 ### 1. Fast Path: One Command on a Fresh Ubuntu Host
@@ -16,7 +14,7 @@ By default this resolves the latest GitHub release tag. You can override it:
 
 ```bash
 SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
-SOLTO_REF=v0.1.0 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+SOLTO_REF=v0.3.0 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
 ```
 
 Run those as root, or prefix them with `sudo` if needed.
@@ -77,7 +75,7 @@ done
 
 `scripts/bootstrap.sh` installs all of these on a fresh Ubuntu box. If you're installing by hand, here's the full list.
 
-solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS. It's free, needs no firewall changes, gives you automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). If you'd rather use something else ([nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/) or [ngrok](https://ngrok.com/)), swap it in. solto only cares that something forwards HTTPS to `localhost:3000`.
+solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) in the default setup, but any of the options listed here also work, including [nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/) and [ngrok](https://ngrok.com/). solto only cares that public HTTPS ends up forwarded to `localhost:3000`.
 
 ### System packages (apt)
 
@@ -111,9 +109,10 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 | [OpenAI API](https://platform.openai.com/) key *or* [ChatGPT subscription](https://openai.com/chatgpt/pricing/) (`codex login`) | If `CODER=codex` (default) |
 | A [Cloudflare](https://www.cloudflare.com/)-managed domain | For the Cloudflare Tunnel hostname |
 
-Best practice: use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
-
-For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone and worktree directory.
+> [!NOTE]
+> Use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
+>
+> For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone and worktree directory.
 
 ## Target Project Requirements
 
@@ -152,7 +151,7 @@ Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
 ## 5. Set Up Public HTTPS (Cloudflare Tunnel)
 
-Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). It's free, zero-firewall, gives automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
+Linear requires HTTPS. solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) in the default setup. It's free, zero-firewall, gives automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
 
 ```bash
 # Authenticate (opens a browser URL; pick your Cloudflare-managed domain)
