@@ -1,5 +1,11 @@
 import { exec } from "./exec.js";
-import { STATE_DONE, getIssueById, postLinearComment, setIssueState } from "./linear.js";
+import {
+  STATE_DONE,
+  getIssueById,
+  postLinearComment,
+  setIssueState,
+  syncPullRequestAttachment,
+} from "./linear.js";
 import { PROJECTS } from "./projects.js";
 import {
   deletePullRequestState,
@@ -54,12 +60,17 @@ async function reconcileEntry(
       return { status: "skipped", reason: `missing Linear issue ${entry.issueId}` };
     }
 
-    if (!dryRun && issue.stateName !== STATE_DONE) {
-      await postLinearComment(
-        issue.id,
-        `PR merged: ${entry.prUrl}\n\nMarking the Linear issue as Done.`
-      );
-      await setIssueState(issue.id, issue.teamId, STATE_DONE);
+    if (!dryRun) {
+      await syncPullRequestAttachment(issue.id, entry.prUrl, "merged").catch((err) => {
+        console.error(`[reconcile] failed to sync PR attachment for ${issue.id}:`, err);
+      });
+      if (issue.stateName !== STATE_DONE) {
+        await postLinearComment(
+          issue.id,
+          `PR merged: ${entry.prUrl}\n\nMarking the Linear issue as Done.`
+        );
+        await setIssueState(issue.id, issue.teamId, STATE_DONE);
+      }
     }
 
     if (!dryRun) {

@@ -2,6 +2,8 @@
 
 # solto [![Test](https://github.com/mohbreu/solto/actions/workflows/test.yml/badge.svg)](https://github.com/mohbreu/solto/actions/workflows/test.yml)
 
+Free, self-hosted, and open source alternative to Linear Agents.
+
 Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issues into GitHub pull requests by running a coding agent ([Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or [OpenAI Codex](https://github.com/openai/codex)) in a dedicated [git worktree](https://git-scm.com/docs/git-worktree) per issue.
 
 ## Demo
@@ -51,7 +53,7 @@ The lightweight test suite covers local state persistence plus a few pure status
 
 1. You assign a Linear issue to your dedicated bot user, such as `solto-bot`.
 2. Linear hits a webhook served by solto (via [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)).
-3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, and opens a PR via [`gh`](https://cli.github.com/).
+3. solto creates a git worktree off `origin/main`, runs the agent headlessly against it, commits the diff, pushes the branch, opens a PR via [`gh`](https://cli.github.com/), and attaches that PR to the Linear issue.
 4. If solto already opened a PR for that issue, a later Linear comment that starts with `@solto-bot` updates the same PR branch.
 5. When the PR is merged, GitHub calls back into solto and the Linear issue moves to `Done`.
 6. The Linear issue self-narrates through comments and workflow states.

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { parsePullRequestNumber } from "./reconcile-utils.js";
 
 export interface LinearIssue {
   id: string;
@@ -25,6 +26,12 @@ export const STATE_IN_PROGRESS = "In Progress";
 export const STATE_IN_REVIEW = "In Review";
 export const STATE_TODO = "Todo";
 export const STATE_DONE = "Done";
+
+export interface LinearPullRequestAttachmentInput {
+  title: string;
+  subtitle: string;
+  url: string;
+}
 
 export function verifyLinearWebhook(
   signature: string | null,
@@ -72,6 +79,51 @@ export async function postLinearComment(
       commentCreate(input: { issueId: $issueId, body: $body }) { success }
     }`,
     { issueId, body }
+  );
+}
+
+export function buildPullRequestAttachmentInput(
+  prUrl: string,
+  status: "open" | "merged" = "open"
+): LinearPullRequestAttachmentInput {
+  const prNumber = parsePullRequestNumber(prUrl);
+  const title = prNumber
+    ? `Pull Request #${prNumber}`
+    : "Pull Request";
+
+  return {
+    title,
+    subtitle: status === "merged" ? "Merged" : "Open",
+    url: prUrl,
+  };
+}
+
+export async function syncPullRequestAttachment(
+  issueId: string,
+  prUrl: string,
+  status: "open" | "merged" = "open"
+): Promise<void> {
+  const attachment = buildPullRequestAttachmentInput(prUrl, status);
+  await linearGraphQL(
+    `mutation AttachmentCreate(
+      $issueId: String!,
+      $title: String!,
+      $subtitle: String!,
+      $url: String!
+    ) {
+      attachmentCreate(input: {
+        issueId: $issueId,
+        title: $title,
+        subtitle: $subtitle,
+        url: $url
+      }) { success }
+    }`,
+    {
+      issueId,
+      title: attachment.title,
+      subtitle: attachment.subtitle,
+      url: attachment.url,
+    }
   );
 }
 

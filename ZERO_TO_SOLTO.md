@@ -9,15 +9,17 @@ Reference for installing and operating solto on your own Linux host. Paths assum
 ### 1. Fast path: one command on a fresh Ubuntu host
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
 ```
 
 By default this resolves the latest GitHub release tag. You can override it:
 
 ```bash
-SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
-SOLTO_REF=v0.1.0 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+SOLTO_REF=v0.1.0 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
 ```
+
+Run those as root, or prefix them with `sudo` if needed.
 
 This does four things:
 
@@ -210,6 +212,7 @@ Then, for each project in `projects.local.json`:
    - assign work to your bot user, for example `solto-bot`
    - keep issues in `Todo` / `To do` when you want them to start
    - `yolo` is optional and pushes directly to `main` instead of opening a PR
+   - Linear's GitHub integration is optional; solto attaches its own PRs directly to the issue
 
 ## 7. Start solto
 
@@ -264,7 +267,7 @@ Get the issue assigned to the bot user and into `Todo` / `To do`. The order does
 2. Adds a git worktree off `origin/main`
 3. Runs the selected coder headlessly
 4. Commits + pushes a feature branch
-5. Opens a PR via `gh pr create`, posts the URL, sets state → **In Review**
+5. Opens a PR via `gh pr create`, attaches it to the Linear issue, posts the URL, sets state → **In Review**
 6. When GitHub later reports that the PR was merged, solto posts a follow-up comment and sets the issue → **Done**
 7. Cleans up the worktree
 

@@ -15,6 +15,7 @@ import {
   getViewerId,
   postLinearComment,
   setIssueState,
+  syncPullRequestAttachment,
   STATE_DONE,
   STATE_TODO,
   type LinearComment,
@@ -601,6 +602,9 @@ app.post("/github-webhook", async (c) => {
     `PR merged: ${prUrl}\n\nMarking the Linear issue as Done.`
   ).catch((err) => {
     console.error(`[github-webhook] failed to post merge comment for ${issue.id}:`, err);
+  });
+  await syncPullRequestAttachment(issue.id, prUrl, "merged").catch((err) => {
+    console.error(`[github-webhook] failed to sync PR attachment for ${issue.id}:`, err);
   });
   await setIssueState(issue.id, issue.teamId, STATE_DONE);
   await deletePullRequestState(issue.id);

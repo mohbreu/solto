@@ -2,6 +2,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { buildCompletionSummary } from "./change-summary.js";
 import { exec, execSilent } from "./exec.js";
 import {
+  syncPullRequestAttachment,
   postLinearComment,
   setIssueState,
   STATE_DONE,
@@ -207,6 +208,9 @@ export async function runAgent(
         base,
         prUrl,
       });
+      await syncPullRequestAttachment(issue.id, prUrl, "open").catch((err) => {
+        console.error(`[linear] failed to sync PR attachment for ${issue.id}:`, err);
+      });
       const now = new Date().toISOString();
       await saveJobState({
         issueId: issue.id,
@@ -256,6 +260,9 @@ export async function runAgent(
       branch,
       base,
       prUrl,
+    });
+    await syncPullRequestAttachment(issue.id, prUrl, "open").catch((err) => {
+      console.error(`[linear] failed to sync PR attachment for ${issue.id}:`, err);
     });
 
     const now = new Date().toISOString();
