@@ -44,6 +44,8 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 
 Best practice: use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
 
+For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone, and worktree directory.
+
 ## Target project requirements: what each repo needs to work with solto
 
 For solto to open PRs against a GitHub repo, the repo must meet these conditions:
@@ -232,7 +234,7 @@ pm2 restart solto --update-env
 
 Then, for each project in `projects.local.json`:
 
-1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`. Best practice: generate this key from a dedicated automation user such as `solto-bot`, not from your personal Linear account.
+1. **Personal API key** (one-time): Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`. Best practice: generate this key from the same dedicated automation user that will receive assignments, such as `solto-bot`, not from your personal Linear account.
 2. **Linear webhook**: Linear → Settings → API → Webhooks → New webhook.
    - URL: `https://<your-webhook-host>/webhook/<project-id>`
    - Resource types: **Issues** and **Comments**
@@ -325,7 +327,7 @@ pm2 info cloudflare-tunnel
 ./scripts/doctor.sh
 ```
 
-`./scripts/doctor.sh` is the first thing to run when solto stops picking up work or auth looks suspect. It checks the local env, pm2 runtime env, repo access, Linear API token, and local health endpoints, and exits non-zero on hard failures.
+`./scripts/doctor.sh` is the first thing to run when solto stops picking up work or auth looks suspect. It checks the local env, pm2 runtime env, repo access, GitHub repo webhooks, the Linear API token, and local health endpoints, and exits non-zero on hard failures.
 
 For a lightweight code-level sanity check:
 
@@ -348,6 +350,15 @@ pm2 stop solto
 pm2 delete solto
 pm2 save                       # persist pm2 state across reboots
 ```
+
+### Upgrade solto
+
+```bash
+cd ~/solto
+./scripts/upgrade.sh
+```
+
+This fast-forwards `main`, refreshes dependencies, reloads pm2 with the current `.env`, and saves the pm2 state. It refuses to run on a dirty checkout.
 
 ### Logs
 
@@ -396,6 +407,16 @@ Add `?include=logs` for a short pm2 log tail without opening `pm2 logs`.
 Use `tail=<n>` to change the log limit. The server clamps it to a small safe range and removes repeated startup noise so the tail stays readable.
 
 In Linear: every issue assigned to the bot user self-narrates via comments (start → workspace ready → PR opened / failed / no-changes) and moves through workflow states.
+
+### Reconcile missed merge events
+
+```bash
+cd ~/solto
+pnpm reconcile --dry-run
+pnpm reconcile
+```
+
+Use this if a PR was merged but the issue stayed in `In Review`, or if you suspect stale PR state under `.solto-state/prs/`. The reconcile command checks tracked PRs against GitHub and repairs drift by marking merged issues as `Done` and pruning closed PR state.
 
 ### Health probes
 
