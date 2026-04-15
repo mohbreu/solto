@@ -6,6 +6,66 @@ Reference for installing and operating solto on your own Linux host. Paths assum
 
 ## Host dependencies: what solto needs to run
 
+## Installing on a new machine
+
+### 1. Fast path: one command on a fresh Ubuntu host
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+```
+
+This does four things:
+
+- runs `scripts/bootstrap.sh`
+- clones or updates `~/solto`
+- runs `pnpm install`
+- seeds `.env` and `projects.local.json` from the examples if they are missing
+
+It intentionally does not try to automate the interactive or environment-specific steps:
+
+- `gh auth login`
+- `codex login` or Claude auth / API key setup
+- editing `.env`
+- editing `projects.local.json`
+- Cloudflare Tunnel login and DNS setup
+- Linear webhook creation
+- GitHub webhook creation
+
+After the installer finishes, continue with:
+
+1. [Authenticate the coder](#5-authenticate-the-coder)
+2. [Set up public HTTPS](#6-set-up-public-https-cloudflare-tunnel)
+3. [Create webhooks](#7-create-webhooks)
+4. [Start solto](#8-start-solto)
+
+### 2. Manual path: bootstrap only
+
+If you want to provision the host without cloning/configuring the repo yet, use the bootstrap-only flow:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
+```
+
+This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared`, and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
+
+### 3. Clone and configure solto (as the `agent` user)
+
+```bash
+sudo su - agent
+gh auth login                                       # authenticate GitHub
+git clone https://github.com/mohbreu/solto.git ~/solto
+cd ~/solto
+pnpm install
+
+cp .env.example .env                                # fill in API keys, LINEAR_API_KEY, STATUS_TOKEN
+cp projects.local.json.example projects.local.json  # list your projects
+
+# Scaffold per-project state (clones repos, creates workers dirs, appends .env keys)
+for id in $(jq -r '.[].id' projects.local.json); do
+    ./scripts/add-project.sh "$id"
+done
+```
+
 `scripts/bootstrap.sh` installs all of these on a fresh Ubuntu box. If you're installing by hand, here's the full list.
 
 solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS. It's free, needs no firewall changes, gives you automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). If you'd rather use something else ([nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/), [ngrok](https://ngrok.com/)), swap it in. solto only cares that something forwards HTTPS to `localhost:3000`.
@@ -109,67 +169,11 @@ Vague issues produce vague diffs. In some cases the agent comments "made no chan
   config.yml               # tunnel config (hostname → localhost:3000)
 ```
 
-## Installing on a new machine
+### 4. Host dependency reference
 
-### 1. Fast path: one command on a fresh Ubuntu host
+The rest of this section is the manual dependency reference for operators who want to know exactly what `bootstrap.sh` installs.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
-```
-
-This does four things:
-
-- runs `scripts/bootstrap.sh`
-- clones or updates `~/solto`
-- runs `pnpm install`
-- seeds `.env` and `projects.local.json` from the examples if they are missing
-
-It intentionally does not try to automate the interactive or environment-specific steps:
-
-- `gh auth login`
-- `codex login` or Claude auth / API key setup
-- editing `.env`
-- editing `projects.local.json`
-- Cloudflare Tunnel login and DNS setup
-- Linear webhook creation
-- GitHub webhook creation
-
-After the installer finishes, continue with:
-
-1. [Authenticate the coder](#4-authenticate-the-coder)
-2. [Set up public HTTPS](#5-set-up-public-https-cloudflare-tunnel)
-3. [Create webhooks](#6-create-webhooks)
-4. [Start solto](#7-start-solto)
-
-### 2. Manual path: bootstrap only
-
-If you want to provision the host without cloning/configuring the repo yet, use the old bootstrap-only flow:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
-```
-
-This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared`, and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
-
-### 3. Clone and configure solto (as the `agent` user)
-
-```bash
-sudo su - agent
-gh auth login                                       # authenticate GitHub
-git clone https://github.com/mohbreu/solto.git ~/solto
-cd ~/solto
-pnpm install
-
-cp .env.example .env                                # fill in API keys, LINEAR_API_KEY, STATUS_TOKEN
-cp projects.local.json.example projects.local.json  # list your projects
-
-# Scaffold per-project state (clones repos, creates workers dirs, appends .env keys)
-for id in $(jq -r '.[].id' projects.local.json); do
-    ./scripts/add-project.sh "$id"
-done
-```
-
-### 4. Authenticate the coder
+### 5. Authenticate the coder
 
 **Codex (default)**: two options:
 - ChatGPT subscription: run `codex login` once (browser flow). Credentials land in `~/.codex/`. Leave `OPENAI_API_KEY` empty in `.env`.
@@ -183,7 +187,7 @@ When `CODER=claude`, solto passes a Claude `--agents` set so the run can delegat
 
 Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
-### 5. Set up public HTTPS ([Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/))
+### 6. Set up public HTTPS ([Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/))
 
 Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). It's free, zero-firewall, gives automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
 
@@ -216,7 +220,7 @@ cloudflared tunnel run solto-tunnel
 # Ctrl+C once you see it connect; pm2 will manage it from here
 ```
 
-### 6. Create webhooks
+### 7. Create webhooks
 
 Set one shared GitHub webhook secret in `.env` first:
 
@@ -250,7 +254,7 @@ Then, for each project in `projects.local.json`:
    - keep issues in `Todo` / `To do` when you want them to start
    - `yolo` is optional and pushes directly to `main` instead of opening a PR
 
-### 7. Start solto
+### 8. Start solto
 
 ```bash
 cd ~/solto

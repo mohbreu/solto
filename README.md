@@ -24,7 +24,7 @@ Fast path on a fresh Ubuntu host:
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
 ```
 
-That installs host dependencies, clones `solto` into `/home/agent/solto`, runs `pnpm install`, and seeds `.env` plus `projects.local.json` if they do not exist yet. You still need to do the interactive/operator-specific steps afterward: `gh auth login`, coder auth, `.env` values, project config, webhook setup, and tunnel setup.
+Then finish the operator-specific steps in [SETUP.md](./SETUP.md): auth, `.env`, project config, tunnel, and webhooks.
 
 After install or any auth/config change, run:
 
@@ -51,7 +51,7 @@ The lightweight test suite covers local state persistence plus a few pure status
 5. When the PR is merged, GitHub calls back into solto and the Linear issue moves to `Done`.
 6. The Linear issue self-narrates through comments and workflow states.
 
-When `CODER=claude`, solto enables Claude subagents for research, bounded implementation, and review. For broader tasks, solto now pushes Claude into a more aggressive delegation mode. If you set `CODER=auto`, solto prefers Claude for more complex parallelizable work when `ANTHROPIC_API_KEY` is present, and otherwise falls back to Codex.
+When `CODER=claude`, solto enables Claude subagents for research, implementation, and review. If you set `CODER=auto`, solto prefers Claude for broader parallelizable work when `ANTHROPIC_API_KEY` is present, and otherwise falls back to Codex.
 
 An issue starts when it ends up both:
 
@@ -117,7 +117,7 @@ For each project:
 
 Use one shared `GITHUB_WEBHOOK_SECRET` for all repo webhooks. Generate it locally once, store it in `~/solto/.env`, restart `solto`, and paste the same value into every GitHub webhook `Secret` field.
 
-The result is isolated per project:
+Each project stays isolated:
 
 - `repos/<id>/` holds the repo clone
 - `workers/<id>/` holds the active worktrees
