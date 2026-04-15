@@ -2,7 +2,8 @@
 # One-command installer for a fresh host.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+#   # run as root, or use sudo if needed
 #
 # Optional env:
 #   SOLTO_REPO=mohbreu/solto
@@ -139,7 +140,8 @@ Next steps (as ${AGENT_USER}):
   # run pm2 startup from your sudo-capable user for boot persistence
 
 Quick install commands for future hosts:
-  curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | sudo bash
-  SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | sudo bash
-  SOLTO_REF=${SOLTO_REF} curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | bash
+  SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | bash
+  SOLTO_REF=${SOLTO_REF} curl -fsSL https://raw.githubusercontent.com/${SOLTO_REPO}/main/install.sh | bash
+  # run those as root, or prefix with sudo if needed
 EOF

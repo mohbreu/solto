@@ -16,13 +16,11 @@ Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issue
 
 ## Install
 
-Use [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md) for the full install and operations guide.
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
 ```
 
-By default the installer resolves the latest GitHub release tag. For versioned installs and the full operator walkthrough, see [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md).
+This runs as root because it installs host packages and creates the locked-down `agent` user. After that, solto itself runs as `agent`, not root. For the full setup and operations guide, use [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md).
 
 ## Upgrade
 
