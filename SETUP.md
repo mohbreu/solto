@@ -2,8 +2,6 @@
 
 Reference for installing and operating solto on your own Linux host. Paths assume Ubuntu 24.04 on the `agent` user, but anything Linux + [systemd](https://systemd.io/) / [pm2](https://pm2.keymetrics.io/) should work.
 
-solto is designed to be cheap to operate: the usual surrounding pieces can stay on free tiers, including [Linear](https://linear.app/), [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), and GitHub-hosted repos. In practice, the main thing you pay for is the model you run behind it.
-
 > **Before installing, read [README.md § Trust model](./README.md#-trust-model-read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can assign an issue to the bot user has what is effectively shell access to your host.
 
 ## Host dependencies: what solto needs to run
