@@ -4,9 +4,9 @@ Reference for installing and operating solto on your own Linux host. Paths assum
 
 > **Before installing, read [README.md § Trust model](./README.md#-trust-model-read-before-deploying).** solto runs a coding agent with permissions bypassed on attacker-influenceable input. Anyone who can assign an issue to the bot user has what is effectively shell access to your host.
 
-## Installing on a new machine
+## Installing on a New Machine
 
-### 1. Fast path: one command on a fresh Ubuntu host
+### 1. Fast Path: One Command on a Fresh Ubuntu Host
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
@@ -45,7 +45,7 @@ After the installer finishes, continue with:
 3. [Create webhooks](#6-create-webhooks)
 4. [Start solto](#7-start-solto)
 
-### 2. Manual path: bootstrap only
+### 2. Manual Path: Bootstrap Only
 
 If you want to provision the host without cloning/configuring the repo yet, use the bootstrap-only flow:
 
@@ -53,9 +53,9 @@ If you want to provision the host without cloning/configuring the repo yet, use 
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
 ```
 
-This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared`, and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
+This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared` and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
 
-### 3. Clone and configure solto (as the `agent` user)
+### 3. Clone and Configure Solto (as the `agent` User)
 
 ```bash
 sudo su - agent
@@ -73,11 +73,11 @@ for id in $(jq -r '.[].id' projects.local.json); do
 done
 ```
 
-## Host dependencies: manual reference
+## Host Dependencies: Manual Reference
 
 `scripts/bootstrap.sh` installs all of these on a fresh Ubuntu box. If you're installing by hand, here's the full list.
 
-solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS. It's free, needs no firewall changes, gives you automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). If you'd rather use something else ([nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/), [ngrok](https://ngrok.com/)), swap it in. solto only cares that something forwards HTTPS to `localhost:3000`.
+solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS. It's free, needs no firewall changes, gives you automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). If you'd rather use something else ([nginx](https://nginx.org/) + [Let's Encrypt](https://letsencrypt.org/), [Caddy](https://caddyserver.com/) or [ngrok](https://ngrok.com/)), swap it in. solto only cares that something forwards HTTPS to `localhost:3000`.
 
 ### System packages (apt)
 
@@ -100,7 +100,7 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 | [**Codex CLI**](https://github.com/openai/codex) (global npm) | Headless agent runtime when `CODER=codex` (default) |
 | [**cloudflared**](https://github.com/cloudflare/cloudflared) (`~/.local/bin/cloudflared`) | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for public HTTPS |
 
-### External accounts / credentials
+### External Accounts / Credentials
 
 | Account | Used for |
 |---|---|
@@ -113,9 +113,9 @@ solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-o
 
 Best practice: use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
 
-For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone, and worktree directory.
+For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone and worktree directory.
 
-## Target project requirements
+## Target Project Requirements
 
 For solto to open PRs against a GitHub repo, the repo must meet these conditions:
 
@@ -124,7 +124,7 @@ For solto to open PRs against a GitHub repo, the repo must meet these conditions
 3. **A default branch exists**. `main` by default. If yours is different, set `githubBase` for that entry in `projects.local.json`.
 4. **`AGENTS.md` at the repo root**. Both Claude Code and Codex read this natively. solto's agent prompt explicitly instructs the agent to read it first and follow every rule. Without one, the agent will guess at your conventions.
 
-### What to put in `AGENTS.md`
+### What to Put in `AGENTS.md`
 
 Minimum contents for the agent to do good work:
 
@@ -136,7 +136,7 @@ Minimum contents for the agent to do good work:
 - **Build/Dev Setup**.
 - **Files/Directories the Agent Should Never Touch**.
 
-## 4. Authenticate the coder
+## 4. Authenticate the Coder
 
 **Codex (default)**: two options:
 - ChatGPT Subscription: Run `codex login` Once (Browser Flow). Credentials Land in `~/.codex/`. Leave `OPENAI_API_KEY` Empty in `.env`.
@@ -146,13 +146,13 @@ solto only forwards `OPENAI_API_KEY` if it's set, so leaving it empty defers to 
 
 **Claude Code**: set `CODER=claude` in `.env` and `ANTHROPIC_API_KEY=<your key>`. Optionally run `claude` once interactively to authenticate.
 
-When `CODER=claude`, solto passes a Claude `--agents` set so the run can delegate research, bounded implementation, and review work inside the same run. For broader tasks and PR follow-ups, solto automatically strengthens those delegation instructions and switches Claude into a more aggressive subagent mode. If you set `CODER=auto`, solto prefers Claude for more complex parallelizable tasks when `ANTHROPIC_API_KEY` is present, and otherwise falls back to Codex. Set `CLAUDE_ENABLE_SUBAGENTS=0` in `.env` if you want to disable Claude subagents entirely.
+When `CODER=claude`, solto passes a Claude `--agents` set so the run can delegate research, bounded implementation and review work inside the same run. For broader tasks and PR follow-ups, solto automatically strengthens those delegation instructions and switches Claude into a more aggressive subagent mode. If you set `CODER=auto`, solto prefers Claude for more complex parallelizable tasks when `ANTHROPIC_API_KEY` is present and otherwise falls back to Codex. Set `CLAUDE_ENABLE_SUBAGENTS=0` in `.env` if you want to disable Claude subagents entirely.
 
 Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
-## 5. Set up public HTTPS (Cloudflare Tunnel)
+## 5. Set Up Public HTTPS (Cloudflare Tunnel)
 
-Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). It's free, zero-firewall, gives automatic HTTPS, and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
+Linear requires HTTPS. solto assumes [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). It's free, zero-firewall, gives automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
 
 ```bash
 # Authenticate (opens a browser URL; pick your Cloudflare-managed domain)
@@ -179,7 +179,7 @@ cloudflared tunnel route dns solto-tunnel <your-host>.<your-domain>
 cloudflared tunnel run solto-tunnel
 ```
 
-## 6. Create webhooks
+## 6. Create Webhooks
 
 Set one shared GitHub webhook secret in `.env` first:
 
@@ -211,7 +211,7 @@ Then, for each project in `projects.local.json`:
 4. **Workflow setup**:
    - assign work to your bot user, for example `solto-bot`
    - keep issues in `Todo` / `To do` when you want them to start
-   - `yolo` is optional and pushes directly to `main` instead of opening a PR
+   - <kbd>yolo</kbd> is optional and pushes directly to `main` instead of opening a PR
    - Linear's GitHub integration is optional; solto attaches its own PRs directly to the issue
 
 ## 7. Start solto
@@ -231,7 +231,7 @@ curl https://<your-webhook-host>/health
 ./scripts/doctor.sh
 ```
 
-## Environment variables (`~/solto/.env`)
+## Environment Variables (`~/solto/.env`)
 
 | Var | Purpose |
 |---|---|
@@ -248,7 +248,7 @@ curl https://<your-webhook-host>/health
 | `TUNNEL_NAME` | Optional override for the cloudflared tunnel name |
 | `AGENT_TIMEOUT_MS` | Optional override for per-run agent timeout (default 20 min) |
 
-## Adding a project after install
+## Adding a Project After Install
 
 ```bash
 # 1. Edit projects.local.json and add a new entry with id + githubRepo
@@ -259,7 +259,7 @@ curl https://<your-webhook-host>/health
 pm2 restart solto
 ```
 
-## Triggering an agent
+## Triggering an Agent
 
 Get the issue assigned to the bot user and into `Todo` / `To do`. The order does not matter. Once an update leaves the issue in that state, the webhook fires and solto:
 
@@ -273,13 +273,13 @@ Get the issue assigned to the bot user and into `Todo` / `To do`. The order does
 
 If `yolo` is also present: pushes directly to `main`, sets state → **Done**. On failure / no-changes: comments the error, sets state → **Todo**.
 
-To iterate on an open PR, add a new Linear comment that starts with the bot mention, usually `@solto-bot`. solto reuses the existing PR branch, makes another commit, pushes it to the same branch, and comments back with the updated PR URL.
+To iterate on an open PR, add a new Linear comment that starts with the bot mention, usually `@solto-bot`. solto reuses the existing PR branch, makes another commit, pushes it to the same branch and comments back with the updated PR URL.
 
 ## Operations
 
 All commands run as the `agent` user.
 
-### Process status
+### Process Status
 
 ```bash
 pm2 status
@@ -294,7 +294,7 @@ For a lightweight code-level sanity check:
 pnpm test
 ```
 
-### Start / stop / restart
+### Start / Stop / Restart
 
 ```bash
 cd ~/solto && pm2 start ecosystem.config.cjs
@@ -308,7 +308,7 @@ pm2 delete solto
 pm2 save
 ```
 
-### Upgrade solto
+### Upgrade Solto
 
 ```bash
 cd ~/solto
@@ -354,7 +354,7 @@ curl -H "x-status-token: $(grep STATUS_TOKEN ~/solto/.env | cut -d= -f2)" \
 - `_version` From `package.json`.
 - `_generatedAt` as the Snapshot Timestamp.
 
-### Reconcile missed merge events
+### Reconcile Missed Merge Events
 
 ```bash
 cd ~/solto
@@ -362,9 +362,9 @@ pnpm reconcile --dry-run
 pnpm reconcile
 ```
 
-Use this if a PR was merged but the issue stayed in `In Review`, or if you suspect stale PR state under `.solto-state/prs/`.
+Use this if a PR was merged but the issue stayed in `In Review` or if you suspect stale PR state under `.solto-state/prs/`.
 
-### Health probes
+### Health Probes
 
 ```bash
 curl https://<your-webhook-host>/health

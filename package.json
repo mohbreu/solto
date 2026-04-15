@@ -1,7 +1,7 @@
 {
   "name": "solto",
   "version": "0.2.0",
-  "description": "Linear-triggered coding-agent orchestrator (Claude Code / Codex). Listens for bot-assigned Linear issues, runs an agent in a git worktree, opens a PR.",
+  "description": "Free, self-hosted and open source alternative to Linear Agents that turns tickets into PRs.",
   "scripts": {
     "start": "tsx --env-file=.env src/server.ts",
     "reconcile": "tsx --env-file=.env src/reconcile-pr-state.ts",
