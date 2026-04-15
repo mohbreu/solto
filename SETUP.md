@@ -219,7 +219,15 @@ cloudflared tunnel run solto-tunnel
 Set one shared GitHub webhook secret in `.env` first:
 
 ```bash
-GITHUB_WEBHOOK_SECRET=<random-secret>
+openssl rand -hex 32
+# copy the output into:
+GITHUB_WEBHOOK_SECRET=<that-random-value>
+```
+
+After saving `.env`, restart solto so it picks up the new secret:
+
+```bash
+pm2 restart solto --update-env
 ```
 
 Then, for each project in `projects.local.json`:
@@ -233,7 +241,7 @@ Then, for each project in `projects.local.json`:
 3. **GitHub webhook**: GitHub repo → Settings → Webhooks → Add webhook.
    - Payload URL: `https://<your-webhook-host>/github-webhook`
    - Content type: `application/json`
-   - Secret: the shared `GITHUB_WEBHOOK_SECRET`
+   - Secret: the exact same `GITHUB_WEBHOOK_SECRET` value from `~/solto/.env`
    - Event: **Pull requests**
 4. **Workflow setup**:
    - assign work to your bot user, for example `solto-bot`

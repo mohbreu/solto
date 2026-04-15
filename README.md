@@ -97,6 +97,8 @@ Your target repo should:
 
 Use one `solto` instance for many repos. Add each target repo to `projects.local.json`, run `./scripts/add-project.sh <id>`, create one Linear webhook per project id, add the matching `<ID>_LINEAR_SECRET` to `.env`, create one GitHub `pull_request` webhook per repo pointing at `/github-webhook`, and restart `solto`.
 
+For the GitHub webhook secret, generate one random value locally, store it in `~/solto/.env` as `GITHUB_WEBHOOK_SECRET=...`, restart `solto`, and paste that exact same value into each repo webhook's `Secret` field.
+
 Each project gets:
 
 - its own clone under `repos/<id>/`
