@@ -17,8 +17,12 @@ import {
 } from "./pr-state.js";
 import type { ProjectConfig } from "./projects.js";
 import { redactSecrets } from "./redact.js";
+import {
+  formatExecutionSummary,
+  parseAgentRunMetadata,
+} from "./run-metadata.js";
 import { getJobState, saveJobState } from "./run-state.js";
-import { CODER_DISPLAY_NAMES, runCoder } from "./runners.js";
+import { CODER_DISPLAY_NAMES, planCoderRun, runCoder } from "./runners.js";
 import { assessTaskProfile, type TaskProfile } from "./task-profile.js";
 
 interface RunAgentOptions {
@@ -40,6 +44,7 @@ export async function runAgent(
   const worktree = `${project.workersPath}/${issue.id}`;
   const prFile = `/tmp/solto-pr-${issue.id}.md`;
   const summaryFile = `/tmp/solto-summary-${issue.id}.md`;
+  const metadataFile = `/tmp/solto-run-${issue.id}.json`;
   const isIteration = Boolean(opts.existingPr);
   const initialRunState = await getJobState(issue.id).catch(() => null);
   const startedAt = initialRunState?.startedAt ?? new Date().toISOString();
@@ -47,6 +52,10 @@ export async function runAgent(
   const taskProfile = assessTaskProfile(issue, {
     followUpInstruction: opts.followUpInstruction,
     existingPrUrl: opts.existingPr?.prUrl,
+  });
+  const runPlan = planCoderRun({
+    preferClaude: taskProfile.preferClaude,
+    aggressiveDelegation: taskProfile.aggressiveDelegation,
   });
   let terminalState:
     | { status: "succeeded" | "direct" | "no_changes" | "failed"; prUrl?: string; error?: string }
@@ -78,11 +87,12 @@ export async function runAgent(
       prUrl: opts.existingPr?.prUrl,
     });
 
-    await postLinearComment(issue.id, "Workspace ready. Running agent.");
-    const coder = await runCoder(
+    await postLinearComment(issue.id, buildRunStartedComment(runPlan));
+    const completedPlan = await runCoder(
       buildPrompt(issue, type, {
         prFile,
         summaryFile,
+        metadataFile,
         followUpInstruction: opts.followUpInstruction,
         existingPrUrl: opts.existingPr?.prUrl,
         taskProfile,
@@ -93,7 +103,10 @@ export async function runAgent(
         aggressiveDelegation: taskProfile.aggressiveDelegation,
       }
     );
-    await postLinearComment(issue.id, `${CODER_DISPLAY_NAMES[coder]} finished.`);
+    await postLinearComment(
+      issue.id,
+      `${CODER_DISPLAY_NAMES[completedPlan.coder]} finished. Running final summary.`
+    );
 
     const diff = await exec("git", [
       "-C", worktree, "diff", "--stat", `origin/${base}`,
@@ -106,7 +119,11 @@ export async function runAgent(
     ]).catch(() => "");
     const hasChanges = diff.trim().length > 0;
     const agentSummary = await readFile(summaryFile, "utf8").catch(() => "");
+    const metadata = parseAgentRunMetadata(
+      await readFile(metadataFile, "utf8").catch(() => "")
+    );
     const summary = summarizeDiff(changedFiles, numstat, agentSummary);
+    const executionSummary = formatExecutionSummary(completedPlan, metadata);
 
     if (!hasChanges) {
       const now = new Date().toISOString();
@@ -125,7 +142,7 @@ export async function runAgent(
       terminalState = { status: "no_changes", prUrl: opts.existingPr?.prUrl };
       await postLinearComment(
         issue.id,
-        "Agent finished but made no changes. The task may already be complete or the description needs more detail."
+        `Agent finished but made no changes. The task may already be complete or the description needs more detail.\n\n${executionSummary}`
       );
       await setIssueState(
         issue.id,
@@ -167,7 +184,7 @@ export async function runAgent(
       terminalState = { status: "direct" };
       await postLinearComment(
         issue.id,
-        `Done. Pushed directly to ${base} (yolo).\n\n${summary}\n\nDiff:\n${diff.trim()}`
+        `Done. Pushed directly to ${base} (yolo).\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
       );
       await setIssueState(issue.id, issue.teamId, STATE_DONE);
       await deletePullRequestState(issue.id);
@@ -206,7 +223,7 @@ export async function runAgent(
       terminalState = { status: "succeeded", prUrl };
       await postLinearComment(
         issue.id,
-        `Done. Updated PR: ${prUrl}\n\n${summary}\n\nDiff:\n${diff.trim()}`
+        `Done. Updated PR: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
       );
       await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -257,7 +274,7 @@ export async function runAgent(
     terminalState = { status: "succeeded", prUrl };
     await postLinearComment(
       issue.id,
-      `Done. PR opened: ${prUrl}\n\n${summary}\n\nDiff:\n${diff.trim()}`
+      `Done. PR opened: ${prUrl}\n\n${executionSummary}\n\n${summary}\n\nDiff:\n\`\`\`diff\n${diff.trim()}\n\`\`\``
     );
     await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -324,7 +341,19 @@ export async function runAgent(
     ]);
     await rm(prFile, { force: true }).catch(() => {});
     await rm(summaryFile, { force: true }).catch(() => {});
+    await rm(metadataFile, { force: true }).catch(() => {});
   }
+}
+
+function buildRunStartedComment(
+  plan: ReturnType<typeof planCoderRun>
+): string {
+  if (plan.coder === "claude") {
+    return plan.claudeSubagentMode === "off"
+      ? "Workspace ready. Running Claude Code without subagents."
+      : `Workspace ready. Running Claude Code with ${plan.claudeSubagentMode} subagent mode.`;
+  }
+  return "Workspace ready. Running Codex.";
 }
 
 function summarizeDiff(
@@ -427,6 +456,7 @@ function buildPrompt(
   opts: {
     prFile: string;
     summaryFile: string;
+    metadataFile: string;
     followUpInstruction?: string;
     existingPrUrl?: string;
     taskProfile: TaskProfile;
@@ -467,6 +497,17 @@ ${opts.existingPrUrl}
 - Focus on what changed and why it matters to the user
 - Do not include diff stats, file lists, ticket IDs, or PR links
 - If the task ends up making no meaningful changes, still write a short note saying so`;
+  const runMetadataBlock = `Run metadata:
+- Before finishing, write JSON to: ${opts.metadataFile}
+- Use this exact shape:
+  {
+    "subagentsUsed": true,
+    "subagentCount": 2,
+    "reviewCompleted": true,
+    "reviewSummary": "Reviewer pass found one cleanup and it was fixed."
+  }
+- If no subagents were used, set "subagentsUsed" to false and "subagentCount" to 0.
+- reviewSummary should be 1 to 2 short sentences in plain English.`;
   const delegationBlock = opts.taskProfile.aggressiveDelegation
     ? `Delegation:
 - This task looks broad enough to justify parallel work.
@@ -499,6 +540,15 @@ ${followUpBlock}${existingPrBlock}Instructions:
 - Run the test suite if one exists and fix any failures you introduce
 - Only modify files directly relevant to this task
 - Make reasonable assumptions where the spec is ambiguous
+- Before finishing, run a final review of the full diff looking for
+  correctness issues, simplification opportunities, regressions, and
+  missing tests. If your runtime supports a reviewer subagent, use it.
+- If that review finds small, safe, clearly beneficial improvements,
+  implement them before finalizing.
+- This includes obvious correctness fixes, small simplifications, missing
+  nearby tests, and cleanup directly caused by your change.
+- Do not turn the review pass into a broad unrelated refactor or expand
+  scope beyond the task unless it is required for correctness.
 - Stage and commit your changes yourself, following AGENTS.md commit rules
   (Conventional Commits, imperative mood, no self-attribution). Do NOT
   push; solto handles pushing and PR creation.
@@ -506,6 +556,7 @@ ${followUpBlock}${existingPrBlock}Instructions:
 ${delegationBlock}
 ${prMetadataBlock}
 ${completionSummaryBlock}
+${runMetadataBlock}
 `.trim();
 }
 

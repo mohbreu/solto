@@ -2,13 +2,17 @@ import { exec } from "./exec.js";
 
 export type Coder = "claude" | "codex";
 export type ConfiguredCoder = Coder | "auto";
+export type ClaudeSubagentMode = "off" | "standard" | "aggressive";
 
 interface RunCoderOptions {
   preferClaude?: boolean;
   aggressiveDelegation?: boolean;
 }
 
-type ClaudeSubagentMode = "off" | "standard" | "aggressive";
+export interface CoderRunPlan {
+  coder: Coder;
+  claudeSubagentMode: ClaudeSubagentMode;
+}
 
 const AGENT_TIMEOUT_MS = Number(process.env.AGENT_TIMEOUT_MS ?? 20 * 60 * 1000);
 
@@ -106,15 +110,28 @@ export function getCoder(opts: RunCoderOptions = {}): Coder {
   });
 }
 
+export function planCoderRun(opts: RunCoderOptions = {}): CoderRunPlan {
+  const coder = getCoder(opts);
+  return {
+    coder,
+    claudeSubagentMode: coder === "claude"
+      ? resolveClaudeSubagentMode(
+          process.env.CLAUDE_SUBAGENT_MODE,
+          Boolean(opts.aggressiveDelegation)
+        )
+      : "off",
+  };
+}
+
 export async function runCoder(
   prompt: string,
   cwd: string,
   opts: RunCoderOptions = {}
-): Promise<Coder> {
-  const coder = getCoder(opts);
-  if (coder === "codex") await runCodex(prompt, cwd);
-  else await runClaude(prompt, cwd, opts);
-  return coder;
+): Promise<CoderRunPlan> {
+  const plan = planCoderRun(opts);
+  if (plan.coder === "codex") await runCodex(prompt, cwd);
+  else await runClaude(prompt, cwd, opts, plan.claudeSubagentMode);
+  return plan;
 }
 
 export const CODER_DISPLAY_NAMES: Record<Coder, string> = {
@@ -134,7 +151,8 @@ function baseEnv(): NodeJS.ProcessEnv {
 async function runClaude(
   prompt: string,
   cwd: string,
-  opts: RunCoderOptions
+  opts: RunCoderOptions,
+  subagentMode: ClaudeSubagentMode
 ): Promise<void> {
   const env = baseEnv();
   if (process.env.ANTHROPIC_API_KEY) {
@@ -145,10 +163,6 @@ async function runClaude(
     "--model", "claude-sonnet-4-5",
     "--max-turns", "30",
   ];
-  const subagentMode = resolveClaudeSubagentMode(
-    process.env.CLAUDE_SUBAGENT_MODE,
-    Boolean(opts.aggressiveDelegation)
-  );
   if (subagentMode !== "off") {
     args.push("--agents", JSON.stringify(buildClaudeSubagents(subagentMode)));
   }

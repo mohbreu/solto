@@ -55,6 +55,7 @@ const STATUS_LOG_SCAN_MULTIPLIERS = [4, 8, 16, 32];
 const ISSUE_ID_RE = /^[a-zA-Z0-9-]{1,64}$/;
 const ISSUE_IDENTIFIER_RE = /^[A-Z0-9]+-[0-9]+$/;
 const PM2_HOME = process.env.PM2_HOME || path.join(process.env.HOME || "", ".pm2");
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 
 interface ProcessSummary {
   status: string;
@@ -107,6 +108,35 @@ async function getProcessStats(): Promise<Record<string, ProcessSummary> | null>
     console.error("[status] failed to read pm2 process stats:", err);
     return null;
   }
+}
+
+async function getDeployedVersion(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", [
+      "-C",
+      ROOT,
+      "describe",
+      "--tags",
+      "--exact-match",
+      "HEAD",
+    ]);
+    const tag = stdout.trim();
+    if (tag) return tag;
+  } catch {}
+
+  try {
+    const { stdout } = await execFileAsync("git", [
+      "-C",
+      ROOT,
+      "rev-parse",
+      "--short",
+      "HEAD",
+    ]);
+    const sha = stdout.trim();
+    if (sha) return sha;
+  } catch {}
+
+  return "unknown";
 }
 
 async function readLogWindow(filePath: string, maxLines: number): Promise<string[]> {
@@ -657,6 +687,7 @@ app.get("/status", async (c) => {
   const logTail = parseTailLimit(c.req.query("tail"));
   const recentJobs = await listRecentJobStates(12);
   const processStats = await getProcessStats();
+  const deployedVersion = await getDeployedVersion();
   const status = Object.fromEntries(
     [...pools.entries()].map(([projectId, workers]) => {
       const list = history.get(projectId)!;
@@ -680,6 +711,7 @@ app.get("/status", async (c) => {
 
   const payload: Record<string, unknown> = {
     ...status,
+    _version: deployedVersion,
     _recent: recentJobs,
     _process: processStats,
     _generatedAt: new Date().toISOString(),
