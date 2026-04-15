@@ -10,8 +10,8 @@
 #   - as 'agent': installs mise, Node LTS, pnpm, pm2, cloudflared, and both
 #     the Claude Code and Codex CLIs
 #
-# After this finishes, log in as the 'agent' user and follow SETUP.md to clone
-# the solto repo and configure projects.
+# After this finishes, log in as the 'agent' user and follow ZERO_TO_SOLTO.md
+# to clone the solto repo and configure projects.
 
 set -euo pipefail
 
@@ -99,7 +99,7 @@ Next steps (as the 'agent' user):
   for id in $(jq -r '.[].id' projects.local.json); do
       ./scripts/add-project.sh "$id"
   done
-  # Set up the Cloudflare Tunnel for public HTTPS (see SETUP.md § Cloudflare Tunnel)
+  # Set up the Cloudflare Tunnel for public HTTPS (see ZERO_TO_SOLTO.md)
   # Create a Linear webhook per project, paste each <ID>_LINEAR_SECRET into .env,
   # and use a dedicated bot user such as solto-bot for LINEAR_API_KEY
   pm2 start ecosystem.config.cjs

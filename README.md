@@ -16,15 +16,22 @@ Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issue
 
 ## Install
 
-Use [SETUP.md](./SETUP.md) for the full install and operations guide. It covers host setup, Linear and GitHub webhook setup, multi-project setup, env vars, restarts, and day-to-day operations.
-
-Fast path on a fresh Ubuntu host:
+Use [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md) for the full install and operations guide.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | sudo bash
 ```
 
-Then finish the operator-specific steps in [SETUP.md](./SETUP.md): auth, `.env`, project config, tunnel, and webhooks.
+By default the installer resolves the latest GitHub release tag. For versioned installs and the full operator walkthrough, see [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md).
+
+## Upgrade
+
+```bash
+cd ~/solto
+./scripts/upgrade.sh
+```
+
+That upgrades to the latest available release, refreshes dependencies, and reloads `pm2`. For `latest`, `main`, or pinned-tag examples, see [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md).
 
 After install or any auth/config change, run:
 
@@ -55,15 +62,15 @@ When `CODER=claude`, solto enables Claude subagents for research, implementation
 
 An issue starts when it ends up both:
 
-- assigned to the bot user
-- in `Todo` / `To do`
+- Assigned to the Bot User.
+- In `Todo` / `To do`.
 
 Commit and branch naming are driven by Linear labels:
 
-- `type:feat`, `type:fix`, `type:docs`, `type:chore`, etc. set the Conventional Commit type solto uses
-- bare labels like `feat`, `fix`, `docs`, and `chore` also work
-- that type is used for both the branch name and the fallback commit message, for example `docs/MOBILE-123-update-readme` and `docs: Update README`
-- if no type label is present, solto defaults to `chore`
+- `type:feat`, `type:fix`, `type:docs`, `type:chore`, etc. Set the Conventional Commit Type Solto Uses.
+- Bare Labels Like `feat`, `fix`, `docs`, and `chore` Also Work.
+- That Type Is Used for Both the Branch Name and the Fallback Commit Message, for Example `docs/MOBILE-123-update-readme` and `docs: Update README`.
+- If No Type Label Is Present, Solto Defaults to `chore`.
 
 Add the `yolo` label to push directly to `main` instead of opening a PR.
 
@@ -90,39 +97,24 @@ solto runs a coding agent with `--dangerously-skip-permissions` (Claude Code) / 
 
 ## Requirements
 
-- A Linux host with a dedicated `agent` user
-- [Node LTS](https://nodejs.org/), [pnpm](https://pnpm.io/), [pm2](https://pm2.keymetrics.io/), [git](https://git-scm.com/), [`gh`](https://cli.github.com/), and [`jq`](https://jqlang.org/)
-- One coding agent CLI: [Codex](https://github.com/openai/codex) (default) or [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)
-- Public HTTPS to `localhost:3000` for Linear webhooks. The default setup uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), but any HTTPS ingress works.
-- A [Linear](https://linear.app/) workspace and a [GitHub](https://github.com/) account that can push branches and open PRs on your target repos
+- A Linux Host With a Dedicated `agent` User.
+- [Node LTS](https://nodejs.org/), [pnpm](https://pnpm.io/), [pm2](https://pm2.keymetrics.io/), [git](https://git-scm.com/), [`gh`](https://cli.github.com/), and [`jq`](https://jqlang.org/).
+- One Coding Agent CLI: [Codex](https://github.com/openai/codex) (Default) or [Claude Code](https://docs.claude.com/en/docs/claude-code/overview).
+- Public HTTPS to `localhost:3000` for Linear Webhooks. The Default Setup Uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), but Any HTTPS Ingress Works.
+- A [Linear](https://linear.app/) Workspace and a [GitHub](https://github.com/) Account That Can Push Branches and Open PRs on Your Target Repos.
 
-Your target repo should:
-
-- Live on GitHub
-- Have a default branch (`main` unless you override `githubBase`)
-- Have an `AGENTS.md` at the repo root with code style, test commands, dependency policy, and any "don't touch this" rules
-- Be usable non-interactively by the agent. If it needs env vars or special setup, document that in `AGENTS.md` or provide an `.env.example`
+Your target repo should live on GitHub, have a default branch, and include a root `AGENTS.md` with code style, test commands, dependency policy, and any “don’t touch this” rules. If the repo needs env vars or special setup, document that in `AGENTS.md` or provide an `.env.example`.
 
 ## Running Multiple Projects
 
-One `solto` instance can handle many repo/team pairs. Treat each entry in `projects.local.json` as one project: one GitHub repo, one Linear team webhook, one local clone, one worktree namespace, and its own rate limits.
-
-For each project:
-
-- add the repo entry to `projects.local.json`
-- run `./scripts/add-project.sh <id>`
-- create one Linear webhook for that project id and paste its secret as `<ID>_LINEAR_SECRET`
-- create one GitHub `pull_request` webhook for the repo pointing at `/github-webhook`
-- restart `solto`
-
-Use one shared `GITHUB_WEBHOOK_SECRET` for all repo webhooks. Generate it locally once, store it in `~/solto/.env`, restart `solto`, and paste the same value into every GitHub webhook `Secret` field.
+One `solto` instance can handle many repo/team pairs. Treat each entry in `projects.local.json` as one project: one GitHub repo, one Linear team webhook, one local clone, one worktree namespace, and its own rate limits. Add a project by updating `projects.local.json`, running `./scripts/add-project.sh <id>`, creating that project’s Linear webhook, creating the repo’s GitHub `pull_request` webhook, and restarting `solto`. Use one shared `GITHUB_WEBHOOK_SECRET` for all GitHub repo webhooks.
 
 Each project stays isolated:
 
-- `repos/<id>/` holds the repo clone
-- `workers/<id>/` holds the active worktrees
-- `projects.local.json` controls concurrency and rate limits
-- `/status` shows each project independently
+- `repos/<id>/` Holds the Repo Clone.
+- `workers/<id>/` Holds the Active Worktrees.
+- `projects.local.json` Controls Concurrency and Rate Limits.
+- `/status` Shows Each Project Independently.
 
 For runtime checks:
 
@@ -132,7 +124,7 @@ curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?inc
 curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?include=logs&tail=5" | jq
 ```
 
-`/status` includes live per-project job counts, recent persisted jobs, bounded pm2 stats, and a response timestamp. Add `?include=logs` for a compact log tail, and `tail=<n>` to control its size.
+`/status` includes live per-project activity, persisted recent jobs, bounded pm2 stats, `_version`, and a response timestamp. Add `?include=logs` for a compact log tail, and `tail=<n>` to control its size.
 
 ## License
 
