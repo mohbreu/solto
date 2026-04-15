@@ -7,7 +7,7 @@ Self-hosted orchestrator that turns assigned [Linear](https://linear.app/) issue
 ## Demo
 
 <p align="center">
-  <video src="./assets/readme-demo.mp4" controls muted playsinline></video>
+  <video src="https://github.com/user-attachments/assets/fdbf9c3c-c997-4a67-88bd-e5555f60641e" controls muted playsinline></video>
 </p>
 
 <p align="center">
