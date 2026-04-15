@@ -356,6 +356,14 @@ async function prepareWorktree(
   isIteration: boolean
 ): Promise<void> {
   if (isIteration) {
+    await execSilent("git", [
+      "-C", project.repoPath,
+      "worktree", "remove", worktree, "--force",
+    ]);
+    await execSilent("git", [
+      "-C", project.repoPath,
+      "worktree", "prune",
+    ]);
     await exec("git", ["-C", project.repoPath, "fetch", "origin", branch]);
     await exec("git", [
       "-C", project.repoPath,
