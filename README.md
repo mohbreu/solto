@@ -90,8 +90,7 @@ For follow-up changes on an existing PR, comment with the bot mention, usually `
 @solto-bot address the review feedback about dependency versions and rerun lint
 ```
 
-<details>
-<summary><strong>Trust Model</strong></summary>
+## Trust Model
 
 > [!WARNING]
 > solto runs a coding agent with `--dangerously-skip-permissions` (Claude Code) / `--dangerously-bypass-approvals-and-sandbox` (Codex) on attacker-influenceable input. Treat assigning an issue to the bot user as **shell access to the host**.
@@ -103,8 +102,6 @@ For follow-up changes on an existing PR, comment with the bot mention, usually `
 - Only let trusted people assign issues to the bot user.
 - Run solto on a dedicated host or at least a locked-down OS user with no unrelated secrets.
 - The `agent` user created by `bootstrap.sh` has no sudo access. Keep it that way.
-
-</details>
 
 ## Requirements
 
