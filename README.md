@@ -33,6 +33,8 @@ cd ~/solto
 
 That upgrades to the latest available release, refreshes dependencies and reloads `pm2`. For the full setup and operations guide, including `latest`, `main` and pinned-tag examples, see [ZERO_TO_SOLTO.md](./ZERO_TO_SOLTO.md).
 
+That guide also covers the simplest Cloudflare setup path with `./scripts/setup-tunnel.sh <your-host>.<your-domain>`.
+
 After install or any auth/config change, run:
 
 ```bash

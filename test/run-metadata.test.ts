@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatCoderRuntimeLabel,
   formatExecutionSummary,
   parseAgentRunMetadata,
 } from "../src/run-metadata.ts";
@@ -37,11 +38,21 @@ test("formatExecutionSummary renders coder, subagents, and review", () => {
     }
   );
 
-  assert.match(summary, /Coder: Claude Code/);
-  assert.match(summary, /Model: claude-sonnet-4-5/);
-  assert.match(summary, /Version: 1.2.3/);
+  assert.match(summary, /Runtime: claude-code@1.2.3 \(claude-sonnet-4-5\)/);
   assert.match(summary, /Claude subagent mode: aggressive/);
   assert.match(summary, /Subagents used: 2/);
   assert.match(summary, /Final review: completed/);
   assert.match(summary, /Review notes: Reviewer pass found no remaining correctness issues\./);
+});
+
+test("formatCoderRuntimeLabel omits model when it is not pinned", () => {
+  assert.equal(
+    formatCoderRuntimeLabel({
+      coder: "codex",
+      claudeSubagentMode: "off",
+      model: "not pinned",
+      version: "0.121.0",
+    }),
+    "codex-cli@0.121.0"
+  );
 });

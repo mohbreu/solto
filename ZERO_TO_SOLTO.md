@@ -32,7 +32,7 @@ It intentionally does not try to automate the interactive or environment-specifi
 - `codex login` or Claude Auth / API Key Setup.
 - Editing `.env`.
 - Editing `projects.local.json`.
-- Cloudflare Tunnel Login and DNS Setup.
+- Cloudflare Tunnel Setup.
 - Linear Webhook Creation.
 - GitHub Webhook Creation.
 
@@ -152,32 +152,25 @@ Per-runner config (model, flags, permission mode) lives in `src/runners.ts`.
 
 ## 5. Set Up Public HTTPS (Cloudflare Tunnel)
 
-Linear requires HTTPS. solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) in the default setup. It's free, zero-firewall, gives automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so you just need to configure it.
+Linear requires HTTPS. solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) in the default setup. It's free, zero-firewall, gives automatic HTTPS and works wherever your domain is on [Cloudflare DNS](https://www.cloudflare.com/). `bootstrap.sh` already installed the [`cloudflared`](https://github.com/cloudflare/cloudflared) binary, so use the helper script and stick to one tunnel flow:
 
 ```bash
-# Authenticate (opens a browser URL; pick your Cloudflare-managed domain)
-cloudflared tunnel login
-
-# Create the named tunnel. Default name solto expects: "solto-tunnel".
-cloudflared tunnel create solto-tunnel
-
-# Write tunnel config (swap in your UUID and hostname)
-cat > ~/.cloudflared/config.yml <<EOF
-tunnel: solto-tunnel
-credentials-file: /home/agent/.cloudflared/<UUID>.json
-
-ingress:
-  - hostname: <your-host>.<your-domain>
-    service: http://localhost:3000
-  - service: http_status:404
-EOF
-
-# Route DNS
-cloudflared tunnel route dns solto-tunnel <your-host>.<your-domain>
-
-# Verify it runs in foreground
-cloudflared tunnel run solto-tunnel
+cd ~/solto
+./scripts/setup-tunnel.sh <your-host>.<your-domain>
+pm2 start ecosystem.config.cjs
+curl https://<your-host>.<your-domain>/health
 ```
+
+What the script does:
+
+- Runs `cloudflared tunnel login` If This Host Is Not Authenticated Yet.
+- Creates `solto-tunnel` If It Does Not Exist Yet.
+- Routes the Hostname to That Tunnel.
+- Writes `~/.cloudflared/config.yml` for `localhost:3000`.
+
+Once that is in place, `pm2 start ecosystem.config.cjs` brings up both `solto` and `cloudflare-tunnel`.
+
+If you already have a tunnel with the same name from another machine and this host does not have the matching credentials file, pick a different `TUNNEL_NAME` or recreate the tunnel on this host.
 
 ## 6. Create Webhooks
 
@@ -245,7 +238,7 @@ curl https://<your-webhook-host>/health
 | `LINEAR_BOT_MENTION` | Optional override for the bot mention alias used in follow-up comments |
 | `<PROJECT>_LINEAR_SECRET` | Webhook signing secret per project |
 | `STATUS_TOKEN` | Random token gating the `/status` endpoint |
-| `TUNNEL_NAME` | Optional override for the cloudflared tunnel name |
+| `TUNNEL_NAME` | Optional override for the cloudflared tunnel name (default `solto-tunnel`) |
 | `AGENT_TIMEOUT_MS` | Optional override for per-run agent timeout (default 20 min) |
 
 ## Adding a Project After Install

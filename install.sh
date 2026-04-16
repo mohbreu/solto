@@ -155,10 +155,10 @@ Next steps (as ${AGENT_USER}):
   for id in \$(jq -r '.[].id' projects.local.json); do
       ./scripts/add-project.sh "\$id"
   done
-  # set up your Cloudflare Tunnel (see ZERO_TO_SOLTO.md)
-  ./scripts/doctor.sh
+  ./scripts/setup-tunnel.sh <your-host>.<your-domain>
   pm2 start ecosystem.config.cjs
   pm2 save
+  ./scripts/doctor.sh
   # run pm2 startup from your sudo-capable user for boot persistence
 
 Quick install commands for future hosts:

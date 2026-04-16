@@ -19,6 +19,7 @@ import {
 import type { ProjectConfig } from "./projects.js";
 import { redactSecrets } from "./redact.js";
 import {
+  formatCoderRuntimeLabel,
   formatExecutionSummary,
   parseAgentRunMetadata,
 } from "./run-metadata.js";
@@ -360,12 +361,13 @@ export async function runAgent(
 function buildRunStartedComment(
   plan: Awaited<ReturnType<typeof enrichRunPlan>>
 ): string {
+  const runtime = formatCoderRuntimeLabel(plan);
   if (plan.coder === "claude") {
     return plan.claudeSubagentMode === "off"
-      ? `Workspace ready. Running Claude Code ${plan.version} on model ${plan.model} without subagents.`
-      : `Workspace ready. Running Claude Code ${plan.version} on model ${plan.model} with ${plan.claudeSubagentMode} subagent mode.`;
+      ? `Workspace ready. Running ${runtime} without subagents.`
+      : `Workspace ready. Running ${runtime} with ${plan.claudeSubagentMode} subagent mode.`;
   }
-  return `Workspace ready. Running Codex ${plan.version} on model ${plan.model}.`;
+  return `Workspace ready. Running ${runtime}.`;
 }
 
 function summarizeDiff(

@@ -14,6 +14,14 @@ export interface RunPlanSummary {
   version: string;
 }
 
+export function formatCoderRuntimeLabel(plan: RunPlanSummary): string {
+  const base = `${plan.coder === "claude" ? "claude-code" : "codex-cli"}@${plan.version}`;
+  if (!plan.model || plan.model === "not pinned" || plan.model === "unknown") {
+    return base;
+  }
+  return `${base} (${plan.model})`;
+}
+
 export function parseAgentRunMetadata(raw: string): AgentRunMetadata | null {
   if (!raw.trim()) return null;
 
@@ -58,9 +66,7 @@ export function formatExecutionSummary(
 ): string {
   const lines = [
     `Execution:`,
-    `- Coder: ${displayCoder(plan.coder)}`,
-    `- Model: ${plan.model}`,
-    `- Version: ${plan.version}`,
+    `- Runtime: ${formatCoderRuntimeLabel(plan)}`,
   ];
 
   if (plan.coder === "claude") {
@@ -87,8 +93,4 @@ export function formatExecutionSummary(
   }
 
   return lines.join("\n");
-}
-
-function displayCoder(coder: Coder): string {
-  return coder === "claude" ? "Claude Code" : "Codex";
 }

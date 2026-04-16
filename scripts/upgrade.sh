@@ -70,6 +70,13 @@ resolve_target_ref() {
     fi
 }
 
+detect_tunnel_hostname() {
+    local config_path="$HOME/.cloudflared/config.yml"
+    if [ -f "$config_path" ]; then
+        sed -nE 's/^[[:space:]-]*hostname:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' "$config_path" | head -n1
+    fi
+}
+
 if [ ! -d "$ROOT/.git" ]; then
     echo "This script must be run from a solto checkout." >&2
     exit 1
@@ -83,6 +90,14 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 TARGET_REF="$(resolve_target_ref "$TARGET_INPUT")"
+TUNNEL_HOSTNAME="$(detect_tunnel_hostname)"
+if [ -n "$TUNNEL_HOSTNAME" ]; then
+    TUNNEL_SETUP_CMD="./scripts/setup-tunnel.sh ${TUNNEL_HOSTNAME}"
+    TUNNEL_HEALTH_CMD="curl https://${TUNNEL_HOSTNAME}/health"
+else
+    TUNNEL_SETUP_CMD="./scripts/setup-tunnel.sh <your-host>.<your-domain>"
+    TUNNEL_HEALTH_CMD="curl https://<your-host>.<your-domain>/health"
+fi
 
 echo "--- Fetching ${TARGET_REF}"
 git fetch --tags origin
@@ -108,4 +123,16 @@ cat <<EOF
 
 The local checkout is now on ${TARGET_REF}, dependencies are refreshed,
 and pm2 has been reloaded with the current environment.
+
+Recommended next steps:
+  ./scripts/doctor.sh
+
+If you changed auth, .env, or project config as part of the upgrade:
+  pm2 restart solto --update-env
+  pm2 restart cloudflare-tunnel
+
+If doctor reports missing Cloudflare tunnel setup:
+  ${TUNNEL_SETUP_CMD}
+  pm2 restart cloudflare-tunnel
+  ${TUNNEL_HEALTH_CMD}
 EOF

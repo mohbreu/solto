@@ -296,17 +296,10 @@ async function getAssignmentTriggerIssue(
     return { issue: null, reason: "unable to resolve bot user" };
   }
 
-  const existingPr = await getPullRequestState(issue.id).catch(() => null);
-  const hasExistingPr = existingPr?.projectId === projectId;
-
   if (issue.assigneeId !== viewerId) {
-    const touchedAssigneeOrState = action === "update" && updateTouchedAssigneeOrState(updatedFrom);
     return {
       issue: null,
       reason: "issue is not assigned to the bot user",
-      feedback: touchedAssigneeOrState && isTodoStateName(issue.stateName)
-        ? "Ignored: this issue is in Todo, but it is not assigned to the bot user. Assign it to the bot to start work."
-        : undefined,
     };
   }
 
@@ -314,9 +307,6 @@ async function getAssignmentTriggerIssue(
     return {
       issue: null,
       reason: `state is not todo: ${issue.stateName ?? "unknown"}`,
-      feedback: hasExistingPr
-        ? undefined
-        : `Ignored: this issue is assigned to the bot user, but its current state is ${issue.stateName ?? "unknown"}. Move it to Todo / To do to start work.`,
     };
   }
 

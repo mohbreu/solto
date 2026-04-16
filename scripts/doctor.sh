@@ -122,6 +122,40 @@ compare_pm2_env() {
     fi
 }
 
+check_tunnel_log_health() {
+    local log_file="$1"
+    local tail_text=""
+
+    if [ ! -f "$log_file" ]; then
+        warn "cloudflare-tunnel log file missing: $log_file"
+        return
+    fi
+
+    tail_text="$(tail -n 80 "$log_file" 2>/dev/null || true)"
+    if [ -z "$tail_text" ]; then
+        pass "cloudflare-tunnel error log is empty"
+        return
+    fi
+
+    if grep -Fq "Error locating origin cert: client didn't specify origincert path" <<<"$tail_text"; then
+        fail "cloudflare-tunnel is missing Cloudflare tunnel credentials; run tunnel login/create and write ~/.cloudflared/config.yml"
+        return
+    fi
+
+    if grep -Fq '"cloudflared tunnel run" accepts only one argument' <<<"$tail_text"; then
+        fail "cloudflare-tunnel command line is invalid"
+        return
+    fi
+
+    pass "cloudflare-tunnel error log has no known auth/arg failures"
+}
+
+parse_tunnel_config_value() {
+    local key="$1"
+    local config_path="$2"
+    awk -F': *' -v key="$key" '$1 == key {print $2; exit}' "$config_path" 2>/dev/null || true
+}
+
 check_github_webhook() {
     local project_id="$1"
     local github_repo="$2"
@@ -222,6 +256,12 @@ if env_has LINEAR_BOT_MENTION; then
     pass "LINEAR_BOT_MENTION configured"
 else
     warn "LINEAR_BOT_MENTION not set; solto will derive mention aliases from the Linear bot user name"
+fi
+
+if env_has TUNNEL_NAME; then
+    pass "TUNNEL_NAME configured"
+else
+    pass "TUNNEL_NAME not set; default solto-tunnel will be used"
 fi
 
 section "Project config"
@@ -362,6 +402,33 @@ if pm2 jlist > "$PM2_JSON_FILE" 2>/dev/null; then
         else
             warn "cloudflare-tunnel pm2 status is $tunnel_status"
         fi
+
+        tunnel_home="$(jq -r '[.[] | select(.name == "cloudflare-tunnel")][0].pm2_env.HOME // empty' "$PM2_JSON_FILE")"
+        if [ -z "$tunnel_home" ]; then
+            tunnel_home="$HOME"
+        fi
+
+        tunnel_config_path="$tunnel_home/.cloudflared/config.yml"
+
+        if [ -f "$tunnel_config_path" ]; then
+            pass "cloudflare tunnel config present at $tunnel_config_path"
+            credentials_file="$(parse_tunnel_config_value credentials-file "$tunnel_config_path")"
+            if [ -n "$credentials_file" ] && [ -f "$credentials_file" ]; then
+                pass "cloudflare tunnel credentials file present"
+            else
+                fail "cloudflare tunnel credentials file missing; update $tunnel_config_path"
+            fi
+            configured_tunnel="$(parse_tunnel_config_value tunnel "$tunnel_config_path")"
+            if [ -n "$configured_tunnel" ]; then
+                pass "cloudflare tunnel config declares tunnel $configured_tunnel"
+            else
+                fail "cloudflare tunnel config is missing a tunnel value"
+            fi
+        else
+            fail "cloudflare tunnel config missing: $tunnel_config_path"
+        fi
+
+        check_tunnel_log_health "${PM2_HOME:-$HOME/.pm2}/logs/cloudflare-tunnel-error.log"
     else
         warn "pm2 does not have a cloudflare-tunnel process"
     fi
@@ -384,6 +451,27 @@ if env_has STATUS_TOKEN; then
     else
         fail "Local /status failed with STATUS_TOKEN"
     fi
+fi
+
+tunnel_public_hostname=""
+tunnel_config_path="$HOME/.cloudflared/config.yml"
+if [ -f "$tunnel_config_path" ]; then
+    tunnel_public_hostname="$(parse_tunnel_config_value hostname "$tunnel_config_path")"
+fi
+
+if [ -n "$tunnel_public_hostname" ]; then
+    public_health="$(curl -sS --max-time 10 "https://$tunnel_public_hostname/health" 2>&1 || true)"
+    if [ "$public_health" = "ok" ]; then
+        pass "Public /health responds through cloudflare-tunnel"
+    elif grep -Fq "error code: 1033" <<<"$public_health"; then
+        fail "Public /health returns Cloudflare 1033; tunnel is not connected to this host"
+    elif [ -n "$public_health" ]; then
+        warn "Public /health returned unexpected response: $public_health"
+    else
+        warn "Public /health check failed for $tunnel_public_hostname"
+    fi
+else
+    warn "Doctor could not determine a public hostname from cloudflare tunnel config"
 fi
 
 printf '\nSummary: %d pass, %d warn, %d fail\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
