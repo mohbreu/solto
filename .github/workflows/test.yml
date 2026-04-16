@@ -49,10 +49,15 @@ jobs:
           set -euo pipefail
           id agent
           sudo test -d /home/agent
-          sudo -u agent bash -lc '
+          sudo -i -u agent env \
+            HOME=/home/agent \
+            XDG_CONFIG_HOME=/home/agent/.config \
+            XDG_CACHE_HOME=/home/agent/.cache \
+            XDG_DATA_HOME=/home/agent/.local/share \
+            XDG_STATE_HOME=/home/agent/.local/state \
+            bash -lc '
             set -euo pipefail
-            export PATH="$HOME/.local/bin:$PATH"
-            eval "$(~/.local/bin/mise activate bash)"
+            source ~/.bashrc
             command -v node
             command -v npm
             command -v pnpm
