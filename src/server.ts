@@ -243,7 +243,7 @@ async function getAssignmentTriggerIssue(
   issueId: string,
   action: string,
   updatedFrom: unknown
-): Promise<{ issue: LinearIssue | null; reason?: string }> {
+): Promise<{ issue: LinearIssue | null; reason?: string; feedback?: string }> {
   const issue = await getIssueById(issueId).catch((err) => {
     console.error(
       `[webhook] failed to fetch issue details for ${projectId}/${issueId}:`,
@@ -264,11 +264,22 @@ async function getAssignmentTriggerIssue(
   }
 
   if (issue.assigneeId !== viewerId) {
-    return { issue: null, reason: "issue is not assigned to the bot user" };
+    const touchedAssigneeOrState = action === "update" && updateTouchedAssigneeOrState(updatedFrom);
+    return {
+      issue: null,
+      reason: "issue is not assigned to the bot user",
+      feedback: touchedAssigneeOrState && isTodoStateName(issue.stateName)
+        ? "Ignored: this issue is in Todo, but it is not assigned to the bot user. Assign it to the bot to start work."
+        : undefined,
+    };
   }
 
   if (!isTodoStateName(issue.stateName)) {
-    return { issue: null, reason: `state is not todo: ${issue.stateName ?? "unknown"}` };
+    return {
+      issue: null,
+      reason: `state is not todo: ${issue.stateName ?? "unknown"}`,
+      feedback: `Ignored: this issue is assigned to the bot user, but its current state is ${issue.stateName ?? "unknown"}. Move it to Todo / To do to start work.`,
+    };
   }
 
   if (action === "create") {
@@ -378,7 +389,7 @@ app.post("/webhook/:projectId", async (c) => {
       return c.text("Bad Request", 400);
     }
 
-    const { issue, reason } = await getAssignmentTriggerIssue(
+    const { issue, reason, feedback } = await getAssignmentTriggerIssue(
       projectId,
       issueFromWebhook.id,
       action,
@@ -386,6 +397,9 @@ app.post("/webhook/:projectId", async (c) => {
     );
     if (!issue) {
       console.log(`[webhook] ignored (${reason ?? "not eligible"})`);
+      if (feedback) {
+        await postLinearComment(issueFromWebhook.id, feedback).catch(() => {});
+      }
       return c.text("OK");
     }
 
@@ -433,6 +447,10 @@ app.post("/webhook/:projectId", async (c) => {
     const existingPr = await getPullRequestState(issueId);
     if (!existingPr || existingPr.projectId !== projectId) {
       console.log(`[webhook] ignored comment (no existing solto PR for issue ${issueId})`);
+      await postLinearComment(
+        issueId,
+        "Ignored bot request: no existing solto-managed PR is associated with this issue yet."
+      ).catch(() => {});
       return c.text("OK");
     }
 
