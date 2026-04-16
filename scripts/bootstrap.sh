@@ -6,7 +6,7 @@
 #
 # What this does:
 #   - creates the 'agent' user (no sudo — intentional)
-#   - installs git, curl, ca-certificates, jq, gh
+#   - installs git, curl, ca-certificates, jq, bubblewrap, gh
 #   - as 'agent': installs mise, Node LTS, pnpm, pm2, cloudflared, and both
 #     the Claude Code and Codex CLIs
 #
@@ -29,7 +29,7 @@ fi
 
 echo "--- Installing system packages"
 apt-get update -q
-apt-get install -y git curl ca-certificates jq
+apt-get install -y git curl ca-certificates jq bubblewrap
 
 echo "--- Installing GitHub CLI"
 if ! command -v gh >/dev/null 2>&1; then

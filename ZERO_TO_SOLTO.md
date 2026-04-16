@@ -51,7 +51,7 @@ If you want to provision the host without cloning/configuring the repo yet, use 
 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
 ```
 
-This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, Node LTS, pnpm, pm2, `cloudflared` and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
+This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, `bubblewrap`, Node LTS, pnpm, pm2, `cloudflared` and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
 
 ### 3. Clone and Configure Solto (as the `agent` User)
 
@@ -85,6 +85,7 @@ solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/
 | `curl`, `ca-certificates` | Fetching installers / TLS |
 | [`gh`](https://cli.github.com/) | Used inside agent runs for `gh pr create` and by `add-project.sh` for `gh repo clone`. **Must be authenticated** (`gh auth login`) as the `agent` user with push + PR-create permission on every target repo |
 | [`jq`](https://jqlang.org/) | `add-project.sh` parses `projects.local.json` |
+| [`bubblewrap`](https://github.com/containers/bubblewrap) | Supports local interactive runs that expect Linux sandbox tooling |
 
 ### Per-user (installed under `~agent`)
 
