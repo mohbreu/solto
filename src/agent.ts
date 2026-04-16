@@ -46,7 +46,7 @@ export async function runAgent(
 ) {
   const type = opts.type ?? "chore";
   const branch = opts.existingPr?.branch
-    ?? `${type}/${issue.identifier}-${slugify(issue.title)}`;
+    ?? buildBranchName(type, issue.identifier, issue.title);
   const base = opts.existingPr?.base ?? project.githubBase;
   const worktree = `${project.workersPath}/${issue.id}`;
   const prFile = `/tmp/solto-pr-${issue.id}.md`;
@@ -574,6 +574,17 @@ ${runMetadataBlock}
 `.trim();
 }
 
+const MAX_BRANCH_TITLE_SLUG_LENGTH = 40;
+
+export function buildBranchName(type: string, identifier: string, title: string): string {
+  return `${type}/${identifier}-${slugify(title)}`;
+}
+
 function slugify(str: string): string {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+  const slug = str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug.slice(0, MAX_BRANCH_TITLE_SLUG_LENGTH).replace(/-+$/g, "");
 }
