@@ -40,7 +40,7 @@ fi
 repo_dir="$ROOT/repos/$id"
 worker_dir="$ROOT/workers/$id"
 env_file="$ROOT/.env"
-env_key="$(echo "$id" | tr 'a-z-' 'A-Z_')_LINEAR_SECRET"
+repo_env_file="$repo_dir/.env"
 
 if [ -d "$repo_dir/.git" ]; then
     echo "✓ $repo_dir already exists, skipping clone"
@@ -62,11 +62,11 @@ if [ ! -f "$env_file" ]; then
     fi
 fi
 
-if grep -q "^${env_key}=" "$env_file"; then
-    echo "✓ $env_key already set in .env"
+if grep -q "^LINEAR_WEBHOOK_SECRET=" "$env_file"; then
+    echo "✓ LINEAR_WEBHOOK_SECRET already set in root .env"
 else
-    echo "${env_key}=" >> "$env_file"
-    echo "→ appended ${env_key}= to .env (fill in after creating the Linear webhook)"
+    echo "LINEAR_WEBHOOK_SECRET=" >> "$env_file"
+    echo "→ appended LINEAR_WEBHOOK_SECRET= to root .env (fill in if this host shares one Linear board secret)"
 fi
 
 cat <<EOF
@@ -76,7 +76,12 @@ Next steps for '$id':
        URL: https://<your-webhook-host>/webhook/$id
        Resource types: Issues + Comments
      Copy the signing secret.
-  2. Paste it into .env as: ${env_key}=<secret>
+  2. If every project on this host shares one Linear board secret, paste it into root .env as:
+       LINEAR_WEBHOOK_SECRET=<secret>
+     Otherwise add a repo-local override in:
+       ${repo_env_file}
+     with:
+       LINEAR_WEBHOOK_SECRET=<secret>
   3. Assign work to your bot user when the issue is in Todo / To do.
      Optional: add the 'yolo' label to push directly to the base branch.
   4. pm2 restart solto

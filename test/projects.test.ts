@@ -1,13 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { envKeyFor } from "../src/project-ids.ts";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolveLinearWebhookSecret } from "../src/project-secrets.ts";
 
-test("envKeyFor uppercases and normalizes dashed ids", async () => {
-  assert.equal(envKeyFor("mobile-app"), "MOBILE_APP");
-  assert.equal(envKeyFor("api"), "API");
+test("resolveLinearWebhookSecret prefers repo-local secret", async () => {
+  const repoPath = await mkdtemp(join(tmpdir(), "solto-project-secret-"));
+  const previousShared = process.env.LINEAR_WEBHOOK_SECRET;
+  process.env.LINEAR_WEBHOOK_SECRET = "shared-secret";
+  await writeFile(join(repoPath, ".env"), "LINEAR_WEBHOOK_SECRET=repo-secret\n");
+  try {
+    assert.equal(resolveLinearWebhookSecret(repoPath), "repo-secret");
+  } finally {
+    if (previousShared === undefined) delete process.env.LINEAR_WEBHOOK_SECRET;
+    else process.env.LINEAR_WEBHOOK_SECRET = previousShared;
+  }
 });
 
-test("envKeyFor rejects invalid project ids", async () => {
-  assert.throws(() => envKeyFor("Mobile-App"), /Invalid project id/);
-  assert.throws(() => envKeyFor("mobile_app"), /Invalid project id/);
+test("resolveLinearWebhookSecret falls back to shared secret", () => {
+  const previousShared = process.env.LINEAR_WEBHOOK_SECRET;
+  process.env.LINEAR_WEBHOOK_SECRET = "shared-secret";
+  try {
+    assert.equal(resolveLinearWebhookSecret("/tmp/does-not-exist"), "shared-secret");
+  } finally {
+    if (previousShared === undefined) delete process.env.LINEAR_WEBHOOK_SECRET;
+    else process.env.LINEAR_WEBHOOK_SECRET = previousShared;
+  }
 });

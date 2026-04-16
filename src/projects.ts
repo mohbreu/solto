@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { envKeyFor } from "./project-ids.js";
+import { resolveLinearWebhookSecret } from "./project-secrets.js";
 
 export interface ProjectConfig {
   id: string;
@@ -51,10 +51,10 @@ function loadEntries(): ProjectEntry[] {
 }
 
 function toConfig(entry: ProjectEntry): ProjectConfig {
-  const envKey = envKeyFor(entry.id);
-  const webhookSecret = process.env[`${envKey}_LINEAR_SECRET`];
+  const repoPath = resolve(ROOT, "repos", entry.id);
+  const webhookSecret = resolveLinearWebhookSecret(repoPath);
   if (!webhookSecret) {
-    throw new Error(`Missing env: ${envKey}_LINEAR_SECRET`);
+    throw new Error(`Missing LINEAR_WEBHOOK_SECRET in ${repoPath}/.env or root .env`);
   }
   return {
     id: entry.id,
@@ -63,7 +63,7 @@ function toConfig(entry: ProjectEntry): ProjectConfig {
     maxParallel: entry.maxParallel ?? 2,
     maxPerHour: entry.maxPerHour ?? 10,
     maxPerDay: entry.maxPerDay ?? 50,
-    repoPath: resolve(ROOT, "repos", entry.id),
+    repoPath,
     workersPath: resolve(ROOT, "workers", entry.id),
     webhookSecret,
   };

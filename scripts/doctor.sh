@@ -69,6 +69,12 @@ env_has() {
     [ -n "${ENV_VARS[$key]-}" ]
 }
 
+env_file_has() {
+    local file="$1"
+    local key="$2"
+    [ -f "$file" ] && grep -q "^${key}=" "$file"
+}
+
 check_command() {
     local cmd="$1"
     if command -v "$cmd" >/dev/null 2>&1; then
@@ -277,15 +283,17 @@ if [ "${#PROJECT_IDS[@]}" -eq 0 ]; then
 fi
 
 for project_id in "${PROJECT_IDS[@]}"; do
-    env_key="$(printf '%s' "$project_id" | tr 'a-z-' 'A-Z_')_LINEAR_SECRET"
     repo_dir="$ROOT/repos/$project_id"
     workers_dir="$ROOT/workers/$project_id"
     github_repo="$(jq -r --arg id "$project_id" '.[] | select(.id == $id) | .githubRepo' "$ROOT/projects.local.json")"
+    repo_env_file="$repo_dir/.env"
 
-    if env_has "$env_key"; then
-        pass "$project_id webhook secret configured"
+    if env_file_has "$repo_env_file" LINEAR_WEBHOOK_SECRET; then
+        pass "$project_id repo-local LINEAR_WEBHOOK_SECRET configured"
+    elif env_has LINEAR_WEBHOOK_SECRET; then
+        pass "$project_id using shared LINEAR_WEBHOOK_SECRET"
     else
-        fail "$project_id missing .env secret: $env_key"
+        fail "$project_id missing LINEAR_WEBHOOK_SECRET in root .env or $repo_env_file"
     fi
 
     check_dir "$repo_dir" "$project_id repo dir"
@@ -387,9 +395,7 @@ if pm2 jlist > "$PM2_JSON_FILE" 2>/dev/null; then
         for key in CODER LINEAR_API_KEY GITHUB_WEBHOOK_SECRET OPENAI_API_KEY ANTHROPIC_API_KEY STATUS_TOKEN LINEAR_BOT_MENTION TUNNEL_NAME; do
             compare_pm2_env "$key"
         done
-        for project_id in "${PROJECT_IDS[@]}"; do
-            compare_pm2_env "$(printf '%s' "$project_id" | tr 'a-z-' 'A-Z_')_LINEAR_SECRET"
-        done
+        compare_pm2_env LINEAR_WEBHOOK_SECRET
     else
         fail "pm2 does not have a solto process"
     fi

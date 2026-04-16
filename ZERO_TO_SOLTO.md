@@ -113,7 +113,7 @@ solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/
 > [!NOTE]
 > Use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
 >
-> For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, but each project gets its own Linear webhook secret, GitHub repo webhook, clone and worktree directory.
+> For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, and each project still gets its own GitHub repo webhook, clone and worktree directory. For Linear, solto first looks for `LINEAR_WEBHOOK_SECRET` in `repos/<project-id>/.env`, then falls back to `LINEAR_WEBHOOK_SECRET` in the root `.env`. That keeps one shared board simple while still allowing per-repo overrides.
 
 ## Target Project Requirements
 
@@ -195,7 +195,8 @@ Then, for each project in `projects.local.json`:
    - URL: `https://<your-webhook-host>/webhook/<project-id>`
    - Resource types: **Issues** and **Comments**
    - Team: the team that owns the project
-   - Copy the signing secret into `.env` as `<PROJECT_ID>_LINEAR_SECRET`
+   - If every project on this host shares one Linear board or webhook secret, copy it into the root `.env` as `LINEAR_WEBHOOK_SECRET`
+   - If a repo needs its own override, add `LINEAR_WEBHOOK_SECRET` to `repos/<project-id>/.env`
 3. **GitHub webhook**:
    - Payload URL: `https://<your-webhook-host>/github-webhook`
    - Content type: `application/json`
@@ -236,7 +237,8 @@ curl https://<your-webhook-host>/health
 | `LINEAR_API_KEY` | Linear personal API key for comments + state updates |
 | `GITHUB_WEBHOOK_SECRET` | Shared GitHub webhook secret for merged PR callbacks |
 | `LINEAR_BOT_MENTION` | Optional override for the bot mention alias used in follow-up comments |
-| `<PROJECT>_LINEAR_SECRET` | Webhook signing secret per project |
+| `LINEAR_WEBHOOK_SECRET` | Shared Linear webhook signing secret in the root `.env` |
+| `repos/<project-id>/.env` → `LINEAR_WEBHOOK_SECRET` | Optional per-repo override taking precedence over the root `.env` |
 | `STATUS_TOKEN` | Random token gating the `/status` endpoint |
 | `TUNNEL_NAME` | Optional override for the cloudflared tunnel name (default `solto-tunnel`) |
 | `AGENT_TIMEOUT_MS` | Optional override for per-run agent timeout (default 20 min) |

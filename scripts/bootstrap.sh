@@ -105,7 +105,8 @@ Next steps (as the 'agent' user):
       ./scripts/add-project.sh "$id"
   done
   # Set up the Cloudflare Tunnel for public HTTPS (see ZERO_TO_SOLTO.md)
-  # Create a Linear webhook per project, paste each <ID>_LINEAR_SECRET into .env,
+  # Create a Linear webhook per project, use one shared LINEAR_WEBHOOK_SECRET in root .env
+  # for a single Linear board/workspace, or add repo-local LINEAR_WEBHOOK_SECRET overrides,
   # and use a dedicated bot user such as solto-bot for LINEAR_API_KEY
   pm2 start ecosystem.config.cjs
   pm2 save
