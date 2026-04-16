@@ -153,7 +153,7 @@ check_tunnel_log_health() {
 parse_tunnel_config_value() {
     local key="$1"
     local config_path="$2"
-    awk -F': *' -v key="$key" '$1 == key {print $2; exit}' "$config_path" 2>/dev/null || true
+    sed -nE "s/^[[:space:]-]*${key}:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\\1/p" "$config_path" | head -n1
 }
 
 check_github_webhook() {
