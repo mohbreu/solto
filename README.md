@@ -103,17 +103,26 @@ Your target repo should:
 - Have an `AGENTS.md` at the repo root with code style, test commands, dependency policy, and any "don't touch this" rules
 - Be usable non-interactively by the agent. If it needs env vars or special setup, document that in `AGENTS.md` or provide an `.env.example`
 
-## Running Multiple Repos
+## Running Multiple Projects
 
-Use one `solto` instance for many repos. Add each target repo to `projects.local.json`, run `./scripts/add-project.sh <id>`, create one Linear webhook per project id, add the matching `<ID>_LINEAR_SECRET` to `.env`, create one GitHub `pull_request` webhook per repo pointing at `/github-webhook`, and restart `solto`.
+One `solto` instance can handle many repo/team pairs. Treat each entry in `projects.local.json` as one project: one GitHub repo, one Linear team webhook, one local clone, one worktree namespace, and its own rate limits.
 
-For the GitHub webhook secret, generate one random value locally, store it in `~/solto/.env` as `GITHUB_WEBHOOK_SECRET=...`, restart `solto`, and paste that exact same value into each repo webhook's `Secret` field.
+For each project:
 
-Each project gets:
+- add the repo entry to `projects.local.json`
+- run `./scripts/add-project.sh <id>`
+- create one Linear webhook for that project id and paste its secret as `<ID>_LINEAR_SECRET`
+- create one GitHub `pull_request` webhook for the repo pointing at `/github-webhook`
+- restart `solto`
 
-- its own clone under `repos/<id>/`
-- its own worktrees under `workers/<id>/`
-- its own concurrency and rate-limit settings in `projects.local.json`
+Use one shared `GITHUB_WEBHOOK_SECRET` for all repo webhooks. Generate it locally once, store it in `~/solto/.env`, restart `solto`, and paste the same value into every GitHub webhook `Secret` field.
+
+The result is isolated per project:
+
+- `repos/<id>/` holds the repo clone
+- `workers/<id>/` holds the active worktrees
+- `projects.local.json` controls concurrency and rate limits
+- `/status` shows each project independently
 
 For runtime checks:
 
