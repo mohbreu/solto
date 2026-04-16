@@ -27,6 +27,22 @@ function joinNatural(items: string[]): string {
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
 }
 
+export function normalizeAgentSummary(raw: string): string | null {
+  const cleaned = raw.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim();
+  if (!cleaned) return null;
+
+  const paragraphs = cleaned
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const normalized = paragraphs.join("\n\n");
+  if (!normalized) return null;
+
+  return normalized.length > 1200 ? `${normalized.slice(0, 1197)}...` : normalized;
+}
+
 export function buildChangeSummary(
   files: string[],
   additions: number,
@@ -60,4 +76,14 @@ export function buildChangeSummary(
 
   const secondParagraph = notes.join(" ");
   return secondParagraph ? `${firstParagraph}\n\n${secondParagraph}` : firstParagraph;
+}
+
+export function buildCompletionSummary(
+  files: string[],
+  additions: number,
+  deletions: number,
+  agentSummary: string
+): string {
+  return normalizeAgentSummary(agentSummary)
+    ?? buildChangeSummary(files, additions, deletions);
 }

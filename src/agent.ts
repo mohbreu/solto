@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { buildChangeSummary } from "./change-summary.js";
+import { buildCompletionSummary } from "./change-summary.js";
 import { exec, execSilent } from "./exec.js";
 import {
   postLinearComment,
@@ -38,6 +38,7 @@ export async function runAgent(
   const base = opts.existingPr?.base ?? project.githubBase;
   const worktree = `${project.workersPath}/${issue.id}`;
   const prFile = `/tmp/solto-pr-${issue.id}.md`;
+  const summaryFile = `/tmp/solto-summary-${issue.id}.md`;
   const isIteration = Boolean(opts.existingPr);
   const initialRunState = await getJobState(issue.id).catch(() => null);
   const startedAt = initialRunState?.startedAt ?? new Date().toISOString();
@@ -76,6 +77,7 @@ export async function runAgent(
     const coder = await runCoder(
       buildPrompt(issue, type, {
         prFile,
+        summaryFile,
         followUpInstruction: opts.followUpInstruction,
         existingPrUrl: opts.existingPr?.prUrl,
       }),
@@ -93,7 +95,8 @@ export async function runAgent(
       "-C", worktree, "diff", "--numstat", `origin/${base}`,
     ]).catch(() => "");
     const hasChanges = diff.trim().length > 0;
-    const summary = summarizeDiff(changedFiles, numstat);
+    const agentSummary = await readFile(summaryFile, "utf8").catch(() => "");
+    const summary = summarizeDiff(changedFiles, numstat, agentSummary);
 
     if (!hasChanges) {
       const now = new Date().toISOString();
@@ -310,10 +313,15 @@ export async function runAgent(
       "branch", "-D", branch,
     ]);
     await rm(prFile, { force: true }).catch(() => {});
+    await rm(summaryFile, { force: true }).catch(() => {});
   }
 }
 
-function summarizeDiff(changedFiles: string, numstat: string): string {
+function summarizeDiff(
+  changedFiles: string,
+  numstat: string,
+  agentSummary: string
+): string {
   const files = changedFiles
     .split("\n")
     .map((line) => line.trim())
@@ -327,7 +335,7 @@ function summarizeDiff(changedFiles: string, numstat: string): string {
     deletions += Number(removed) || 0;
   }
 
-  return buildChangeSummary(files, additions, deletions);
+  return buildCompletionSummary(files, additions, deletions, agentSummary);
 }
 
 async function prepareWorktree(
@@ -400,6 +408,7 @@ function buildPrompt(
   type: string,
   opts: {
     prFile: string;
+    summaryFile: string;
     followUpInstruction?: string;
     existingPrUrl?: string;
   }
@@ -433,6 +442,12 @@ ${opts.existingPrUrl}
 - Body should summarize the actual diff and why: 1 to 3 short paragraphs
   or a tight bulleted list. No ticket IDs, no "Resolves:" references,
   and no self-attribution.`;
+  const completionSummaryBlock = `Completion summary:
+- Before finishing, write a short natural-language summary to: ${opts.summaryFile}
+- Use 1 to 2 short paragraphs in plain English
+- Focus on what changed and why it matters to the user
+- Do not include diff stats, file lists, ticket IDs, or PR links
+- If the task ends up making no meaningful changes, still write a short note saying so`;
 
   return `
 You are an autonomous software agent working on a real codebase.
@@ -460,6 +475,7 @@ ${followUpBlock}${existingPrBlock}Instructions:
   push; solto handles pushing and PR creation.
 
 ${prMetadataBlock}
+${completionSummaryBlock}
 `.trim();
 }
 

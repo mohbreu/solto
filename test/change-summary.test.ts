@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildChangeSummary } from "../src/change-summary.ts";
+import {
+  buildChangeSummary,
+  buildCompletionSummary,
+  normalizeAgentSummary,
+} from "../src/change-summary.ts";
 
 test("buildChangeSummary includes file count, line counts, and main areas", () => {
   const summary = buildChangeSummary(
@@ -25,4 +29,32 @@ test("buildChangeSummary handles a single changed file", () => {
 
   assert.match(summary, /Updated 1 file with about \+4 \/ -1 lines changed\./);
   assert.match(summary, /Dependency or package metadata changed/i);
+});
+
+test("buildCompletionSummary prefers an agent-provided summary", () => {
+  const summary = buildCompletionSummary(
+    ["src/server.ts"],
+    10,
+    2,
+    "The agent summary.\n\nIt stayed focused."
+  );
+
+  assert.equal(summary, "The agent summary.\n\nIt stayed focused.");
+});
+
+test("buildCompletionSummary falls back to the deterministic summary", () => {
+  const summary = buildCompletionSummary(["README.md"], 3, 1, "");
+
+  assert.match(summary, /Updated 1 file with about \+3 \/ -1 lines changed\./);
+  assert.match(summary, /Documentation was updated alongside the implementation\./);
+});
+
+test("normalizeAgentSummary trims to two paragraphs and ignores empty text", () => {
+  assert.equal(normalizeAgentSummary("   "), null);
+
+  const summary = normalizeAgentSummary(
+    "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
+  );
+
+  assert.equal(summary, "First paragraph.\n\nSecond paragraph.");
 });
