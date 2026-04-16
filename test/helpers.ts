@@ -13,3 +13,7 @@ export async function cleanupState(kind: "prs" | "runs", issueIds: string[]): Pr
     )
   );
 }
+
+export async function cleanupStateDir(kind: "prs" | "runs"): Promise<void> {
+  await rm(resolve(process.cwd(), ".solto-state", kind), { recursive: true, force: true }).catch(() => {});
+}

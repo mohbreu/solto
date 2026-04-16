@@ -44,6 +44,29 @@ export async function deletePullRequestState(issueId: string): Promise<void> {
   await rm(statePathFor(issueId), { force: true }).catch(() => {});
 }
 
+export async function listPullRequestStates(): Promise<PullRequestState[]> {
+  await mkdir(STATE_DIR, { recursive: true });
+  const names = await readdir(STATE_DIR).catch(() => [] as string[]);
+  const entries: PullRequestState[] = [];
+
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+
+    const raw = await readFile(resolve(STATE_DIR, name), "utf8").catch(() => "");
+    if (!raw.trim()) continue;
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+    entries.push(parsed as PullRequestState);
+  }
+
+  return entries.sort((a, b) => {
+    if (a.projectId !== b.projectId) return a.projectId.localeCompare(b.projectId);
+    return a.issueId.localeCompare(b.issueId);
+  });
+}
+
 export async function findPullRequestStateByUrl(
   prUrl: string
 ): Promise<PullRequestState | null> {
