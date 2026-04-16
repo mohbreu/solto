@@ -9,7 +9,7 @@ Solto is ideal for solo developers looking to build momentum on their ideas.
 ## Demo
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/fdbf9c3c-c997-4a67-88bd-e5555f60641e" controls muted playsinline></video>
+  <a href="https://github.com/user-attachments/assets/fdbf9c3c-c997-4a67-88bd-e5555f60641e">Watch the Demo Video</a>
 </p>
 
 <p align="center">
