@@ -1,6 +1,6 @@
 {
   "name": "solto",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Free, self-hosted and open source alternative to Linear Agents that turns tickets into PRs.",
   "scripts": {
     "start": "tsx --env-file=.env src/server.ts",

@@ -1,6 +1,6 @@
 ![solto banner](./assets/readme-banner.jpg)
 
-# solto [![Test](https://github.com/mohbreu/solto/actions/workflows/test.yml/badge.svg)](https://github.com/mohbreu/solto/actions/workflows/test.yml)
+# solto [![Test](https://github.com/breu-rr/solto/actions/workflows/test.yml/badge.svg)](https://github.com/breu-rr/solto/actions/workflows/test.yml)
 
 Free, self-hosted and open source alternative to Linear Agents that turns tickets into PRs.
 
@@ -19,7 +19,7 @@ Solto is ideal for solo developers looking to build momentum on their ideas.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/install.sh | bash
 ```
 
 Run it as root, or prefix it with `sudo` if needed. The installer needs root because it installs host packages and creates the locked-down `agent` user. After that, solto itself runs as `agent`, not root.

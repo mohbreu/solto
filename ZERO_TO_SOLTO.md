@@ -7,14 +7,14 @@ Reference for installing and operating solto on your own Linux host. Paths assum
 ### 1. Fast Path: One Command on a Fresh Ubuntu Host
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/install.sh | bash
 ```
 
 By default this resolves the latest GitHub release tag. You can override it:
 
 ```bash
-SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
-SOLTO_REF=v0.3.0 curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+SOLTO_REF=main curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/install.sh | bash
+SOLTO_REF=v0.4.2 curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/install.sh | bash
 ```
 
 Run those as root, or prefix them with `sudo` if needed.
@@ -48,7 +48,7 @@ After the installer finishes, continue with:
 If you want to provision the host without cloning/configuring the repo yet, use the bootstrap-only flow:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/scripts/bootstrap.sh | sudo bash
 ```
 
 This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`, `jq`, `bubblewrap`, Node LTS, pnpm, pm2, `cloudflared` and both the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and [Codex](https://github.com/openai/codex) CLIs. On anything not Ubuntu, read the script and port it by hand.
@@ -58,7 +58,7 @@ This creates the `agent` user (no sudo, intentionally) and installs `git`, `gh`,
 ```bash
 sudo su - agent
 gh auth login                                       # authenticate GitHub
-git clone https://github.com/mohbreu/solto.git ~/solto
+git clone https://github.com/breu-rr/solto.git ~/solto
 cd ~/solto
 pnpm install
 

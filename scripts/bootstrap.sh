@@ -2,7 +2,7 @@
 # solto bootstrap: installs system prerequisites on a fresh Ubuntu host.
 #
 # Run as root (or the initial sudo-capable user — e.g. `ubuntu` on Lightsail):
-#   curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/scripts/bootstrap.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/scripts/bootstrap.sh | sudo bash
 #
 # What this does:
 #   - creates the 'agent' user (no sudo — intentional)
@@ -96,7 +96,7 @@ Next steps (as the 'agent' user):
 
   sudo su - agent
   gh auth login
-  git clone https://github.com/mohbreu/solto.git ~/solto
+  git clone https://github.com/breu-rr/solto.git ~/solto
   cd ~/solto
   pnpm install
   cp .env.example .env                              # fill in API keys + STATUS_TOKEN

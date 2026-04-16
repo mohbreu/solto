@@ -2,11 +2,11 @@
 # One-command installer for a fresh host.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/mohbreu/solto/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/breu-rr/solto/main/install.sh | bash
 #   # run as root, or use sudo if needed
 #
 # Optional env:
-#   SOLTO_REPO=mohbreu/solto
+#   SOLTO_REPO=breu-rr/solto
 #   SOLTO_REF=latest   # or main or a specific tag like v0.1.0
 #   AGENT_USER=agent
 #   SOLTO_DIR=/home/agent/solto
@@ -18,7 +18,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     exit 1
 fi
 
-SOLTO_REPO="${SOLTO_REPO:-mohbreu/solto}"
+SOLTO_REPO="${SOLTO_REPO:-breu-rr/solto}"
 SOLTO_REF_INPUT="${SOLTO_REF:-latest}"
 AGENT_USER="${AGENT_USER:-agent}"
 SOLTO_DIR="${SOLTO_DIR:-/home/$AGENT_USER/solto}"
