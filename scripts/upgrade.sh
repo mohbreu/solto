@@ -113,8 +113,10 @@ fi
 echo "--- Refreshing dependencies"
 pnpm install --frozen-lockfile
 
-echo "--- Reloading pm2 with current env"
-pm2 startOrReload ecosystem.config.cjs --update-env
+echo "--- Refreshing pm2 processes with current env"
+pm2 delete solto >/dev/null 2>&1 || true
+pm2 delete cloudflare-tunnel >/dev/null 2>&1 || true
+pm2 start ecosystem.config.cjs --update-env
 pm2 save
 
 cat <<EOF
@@ -122,7 +124,7 @@ cat <<EOF
 --- Upgrade complete
 
 The local checkout is now on ${TARGET_REF}, dependencies are refreshed,
-and pm2 has been reloaded with the current environment.
+and pm2 has been restarted with the current environment.
 
 Recommended next steps:
   ./scripts/doctor.sh
