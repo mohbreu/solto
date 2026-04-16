@@ -44,7 +44,7 @@ else
 fi
 
 echo "--- Running agent user setup"
-sudo -H -u agent bash << 'AGENT_SETUP'
+sudo -i -u agent bash << 'AGENT_SETUP'
 set -euo pipefail
 
 echo "--- Installing Claude Code CLI"

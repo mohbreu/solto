@@ -76,7 +76,7 @@ bash -c "$(curl -fsSL "$BOOTSTRAP_URL")"
 echo "--- Installing solto ref ${SOLTO_REF}"
 
 echo "--- Installing solto repo into ${SOLTO_DIR}"
-sudo -H -u "$AGENT_USER" env \
+sudo -i -u "$AGENT_USER" env \
     SOLTO_DIR="$SOLTO_DIR" \
     REPO_URL="$REPO_URL" \
     SOLTO_REF="$SOLTO_REF" \
