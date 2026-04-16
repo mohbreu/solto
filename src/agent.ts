@@ -1,4 +1,5 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
+import { buildChangeSummary } from "./change-summary.js";
 import { exec, execSilent } from "./exec.js";
 import {
   postLinearComment,
@@ -85,7 +86,14 @@ export async function runAgent(
     const diff = await exec("git", [
       "-C", worktree, "diff", "--stat", `origin/${base}`,
     ]).catch(() => "");
+    const changedFiles = await exec("git", [
+      "-C", worktree, "diff", "--name-only", `origin/${base}`,
+    ]).catch(() => "");
+    const numstat = await exec("git", [
+      "-C", worktree, "diff", "--numstat", `origin/${base}`,
+    ]).catch(() => "");
     const hasChanges = diff.trim().length > 0;
+    const summary = summarizeDiff(changedFiles, numstat);
 
     if (!hasChanges) {
       const now = new Date().toISOString();
@@ -146,7 +154,7 @@ export async function runAgent(
       terminalState = { status: "direct" };
       await postLinearComment(
         issue.id,
-        `Done. Pushed directly to ${base} (yolo).\n\n${diff.trim()}`
+        `Done. Pushed directly to ${base} (yolo).\n\n${summary}\n\nDiff:\n${diff.trim()}`
       );
       await setIssueState(issue.id, issue.teamId, STATE_DONE);
       await deletePullRequestState(issue.id);
@@ -185,7 +193,7 @@ export async function runAgent(
       terminalState = { status: "succeeded", prUrl };
       await postLinearComment(
         issue.id,
-        `Done. Updated PR: ${prUrl}\n\n${diff.trim()}`
+        `Done. Updated PR: ${prUrl}\n\n${summary}\n\nDiff:\n${diff.trim()}`
       );
       await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -236,7 +244,7 @@ export async function runAgent(
     terminalState = { status: "succeeded", prUrl };
     await postLinearComment(
       issue.id,
-      `Done. PR opened: ${prUrl}\n\n${diff.trim()}`
+      `Done. PR opened: ${prUrl}\n\n${summary}\n\nDiff:\n${diff.trim()}`
     );
     await setIssueState(issue.id, issue.teamId, STATE_IN_REVIEW);
 
@@ -303,6 +311,23 @@ export async function runAgent(
     ]);
     await rm(prFile, { force: true }).catch(() => {});
   }
+}
+
+function summarizeDiff(changedFiles: string, numstat: string): string {
+  const files = changedFiles
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let additions = 0;
+  let deletions = 0;
+  for (const line of numstat.split("\n")) {
+    const [added, removed] = line.trim().split(/\s+/, 3);
+    additions += Number(added) || 0;
+    deletions += Number(removed) || 0;
+  }
+
+  return buildChangeSummary(files, additions, deletions);
 }
 
 async function prepareWorktree(
