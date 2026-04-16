@@ -38,7 +38,7 @@ test("formatExecutionSummary renders coder, subagents, and review", () => {
     }
   );
 
-  assert.match(summary, /Runtime: claude-code@1.2.3 \(claude-sonnet-4-5\)/);
+  assert.match(summary, /Runtime: `claude-code@1.2.3 \(claude-sonnet-4-5\)`/);
   assert.match(summary, /Claude subagent mode: aggressive/);
   assert.match(summary, /Subagents used: 2/);
   assert.match(summary, /Final review: completed/);
