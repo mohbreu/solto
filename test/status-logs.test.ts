@@ -22,13 +22,13 @@ test("compactStartupNoise collapses repeated startup boilerplate", () => {
     "> tsx --env-file=.env src/server.ts",
     "solto running on :3000",
     "  GET  /health",
-    "[webhook] hit /webhook/mobile-app",
+    "[webhook] hit /linear-webhook",
     "[webhook] ignored comment (no bot mention command)",
   ]);
 
   assert.deepEqual(actual, [
     "[startup noise omitted: 5 lines]",
-    "[webhook] hit /webhook/mobile-app",
+    "[webhook] hit /linear-webhook",
     "[webhook] ignored comment (no bot mention command)",
   ]);
 });

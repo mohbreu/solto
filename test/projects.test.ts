@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { issueBelongsToProject } from "../src/project-routing.ts";
+import {
+  findProjectByLinearProjectId,
+  issueBelongsToProject,
+} from "../src/project-routing.ts";
 import { resolveLinearWebhookSecret } from "../src/project-secrets.ts";
 
 test("resolveLinearWebhookSecret prefers repo-local secret", async () => {
@@ -43,4 +46,17 @@ test("issueBelongsToProject requires an exact linearProjectId match", () => {
     issueBelongsToProject({ linearProjectId: "project-1" }, null),
     false
   );
+});
+
+test("findProjectByLinearProjectId resolves the matching managed project", () => {
+  const project = findProjectByLinearProjectId(
+    [
+      { id: "mobile-app", linearProjectId: "project-1" },
+      { id: "www", linearProjectId: "project-2" },
+    ],
+    "project-2"
+  );
+  assert.deepEqual(project, { id: "www", linearProjectId: "project-2" });
+  assert.equal(findProjectByLinearProjectId([], "project-2"), null);
+  assert.equal(findProjectByLinearProjectId([{ id: "x", linearProjectId: "p" }], null), null);
 });

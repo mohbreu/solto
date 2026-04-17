@@ -135,8 +135,10 @@ cat <<EOF
 
 Next steps for '$id':
   1. In Linear, create a webhook at Settings → API → Webhooks:
-       URL: https://<your-webhook-host>/webhook/$id
+       URL: https://<your-webhook-host>/linear-webhook
        Resource types: Issues + Comments
+     If multiple projects live under the same Linear team, they can share that one team-level webhook.
+     If projects live under different Linear teams, create one webhook per team, all pointing to /linear-webhook.
      Copy the signing secret.
   2. If every project on this host shares one Linear board secret, paste it into root .env as:
        LINEAR_WEBHOOK_SECRET=<secret>

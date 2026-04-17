@@ -109,7 +109,7 @@ Your target repo should live on GitHub, have a default branch and include a root
 
 ## Running Multiple Projects
 
-One `solto` instance can handle many repo/team pairs. Treat each entry in `projects.local.json` as one project: one GitHub repo, one bound Linear project, one local clone, one worktree namespace and its own rate limits. Add a project by updating `projects.local.json`, running `./scripts/add-project.sh <id>`, creating that project’s Linear webhook, creating the repo’s GitHub `pull_request` webhook and restarting `solto`. Use one shared `GITHUB_WEBHOOK_SECRET` for all GitHub repo webhooks. For Linear, solto first looks for `LINEAR_WEBHOOK_SECRET` in `repos/<project-id>/.env`, then falls back to `LINEAR_WEBHOOK_SECRET` in the root `.env`. You can seed a new entry with the exact `linearProjectName`, and `./scripts/add-project.sh` will resolve and persist the real `linearProjectId` back into `projects.local.json`. That `linearProjectId` is the hard guard that binds each repo to exactly one Linear project so a misconfigured webhook cannot dispatch tickets into the wrong repo.
+One `solto` instance can handle many repos and Linear projects under one GitHub identity. Add a project by updating `projects.local.json`, running `./scripts/add-project.sh <id>`, wiring the shared Linear `/linear-webhook`, wiring the repo’s GitHub `pull_request` webhook and restarting `solto`. `./scripts/add-project.sh` resolves the exact `linearProjectName` into a persisted `linearProjectId`, which solto uses as the hard repo/project binding.
 
 Each project stays isolated:
 
@@ -127,6 +127,32 @@ curl -H "x-status-token: <STATUS_TOKEN>" "https://<your-webhook-host>/status?inc
 ```
 
 `/status` includes live per-project activity, persisted recent jobs, bounded pm2 stats, `_version` and a response timestamp. Add `?include=logs` for a compact log tail and `tail=<n>` to control its size.
+
+## FAQ
+
+<details>
+  <summary>Can one solto instance manage multiple repos and projects?</summary>
+
+  Yes. One instance can manage many repo/project pairs as long as they all use the same GitHub identity on that host.
+</details>
+
+<details>
+  <summary>How should I set up Linear webhooks for multiple projects?</summary>
+
+  If several projects live under the same Linear team, they can share one team-level webhook pointing to `/linear-webhook`. If projects live under different Linear teams, create one Linear webhook per team, all pointing to the same `/linear-webhook` URL.
+</details>
+
+<details>
+  <summary>How does solto know which repo a Linear ticket belongs to?</summary>
+
+  Each `projects.local.json` entry starts with an exact `linearProjectName`. `./scripts/add-project.sh` resolves that to the real `linearProjectId` and writes it back into the file. At runtime, solto routes by that persisted `linearProjectId`.
+</details>
+
+<details>
+  <summary>Can different repos on the same host use different GitHub users?</summary>
+
+  No. One running `solto` instance assumes one GitHub identity for the whole host. If a repo needs a different GitHub user, run a separate `solto` instance on another host.
+</details>
 
 ## License
 

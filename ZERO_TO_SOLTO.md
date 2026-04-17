@@ -71,6 +71,27 @@ for id in $(jq -r '.[].id' projects.local.json); do
 done
 ```
 
+### Optional: SSH Aliases
+
+If you run more than one `solto` host, add aliases in your local `~/.ssh/config` so you do not have to remember IPs or hostnames.
+
+```sshconfig
+Host solto-mobile
+  HostName <server-ip-or-hostname>
+  User agent
+
+Host solto-www
+  HostName <server-ip-or-hostname>
+  User agent
+```
+
+Then you can connect with:
+
+```bash
+ssh solto-mobile
+ssh solto-www
+```
+
 ## Host Dependencies: Manual Reference
 
 `scripts/bootstrap.sh` installs all of these on a fresh Ubuntu box. If you're installing by hand, here's the full list.
@@ -113,14 +134,14 @@ solto uses [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/
 > [!NOTE]
 > Use a dedicated Linear user such as `solto-bot` for `LINEAR_API_KEY` so automation comments and state changes are isolated from your personal account.
 >
-> For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, and each project still gets its own GitHub repo webhook, clone and worktree directory. For Linear, solto first looks for `LINEAR_WEBHOOK_SECRET` in `repos/<project-id>/.env`, then falls back to `LINEAR_WEBHOOK_SECRET` in the root `.env`. You can seed a new entry with the exact `linearProjectName`, and `./scripts/add-project.sh` will resolve and persist the real `linearProjectId` back into `projects.local.json`. That `linearProjectId` is the hard binding between one Linear project and one GitHub repo, which prevents a shared board from dispatching the wrong ticket into the wrong repo.
+> For multiple repos or teams, keep one project entry per repo/team pair. The shared host settings stay the same, and each project still gets its own GitHub repo webhook, clone and worktree directory. A single `solto` instance assumes one GitHub identity for the whole host. If a repo needs a different GitHub user, run a separate `solto` instance on another host. For Linear, solto first looks for `LINEAR_WEBHOOK_SECRET` in `repos/<project-id>/.env`, then falls back to `LINEAR_WEBHOOK_SECRET` in the root `.env`. If several projects live under the same Linear team, they can all share one team-level webhook pointing to `/linear-webhook`. If projects live under different Linear teams, create one Linear webhook per team, all pointing to the same `/linear-webhook` URL. You can seed a new entry with the exact `linearProjectName`, and `./scripts/add-project.sh` will resolve and persist the real `linearProjectId` back into `projects.local.json`. That `linearProjectId` is the hard binding between one Linear project and one GitHub repo, which prevents a shared board from dispatching the wrong ticket into the wrong repo.
 
 ## Target Project Requirements
 
 For solto to open PRs against a GitHub repo, the repo must meet these conditions:
 
 1. **GitHub-hosted**. solto clones via `gh repo clone <owner>/<repo>` and opens PRs via `gh pr create`.
-2. **`agent` user has push + PR-create permission**. Configure this once via `gh auth login`. For org-owned repos, make sure the auth token has the right scopes and the user is a collaborator with at least Write access.
+2. **`agent` user has push + PR-create permission**. Configure this once via `gh auth login`. For org-owned repos, make sure the auth token has the right scopes and the user is a collaborator with at least Write access. One running `solto` instance assumes this single GitHub identity for all managed repos on that host.
 3. **A default branch exists**. `main` by default. If yours is different, set `githubBase` for that entry in `projects.local.json`.
 4. **`AGENTS.md` at the repo root**. Both Claude Code and Codex read this natively. solto's agent prompt explicitly instructs the agent to read it first and follow every rule. Without one, the agent will guess at your conventions.
 
@@ -188,13 +209,16 @@ After saving `.env`, restart solto so it picks up the new secret:
 pm2 restart solto --update-env
 ```
 
-Then, for each project in `projects.local.json`:
+Then, for each team plus each project in `projects.local.json`:
 
 1. **Personal API key**: Linear → Settings → API → Personal API keys → New key. Paste into `.env` as `LINEAR_API_KEY`. Best practice: generate this key from the same dedicated automation user that will receive assignments, such as `solto-bot`, not from your personal Linear account.
 2. **Linear webhook**:
-   - URL: `https://<your-webhook-host>/webhook/<project-id>`
+   - URL: `https://<your-webhook-host>/linear-webhook`
    - Resource types: **Issues** and **Comments**
    - Team: the team that owns the project
+   - One team-level Linear webhook can cover multiple projects on this host because solto routes by the fetched `linearProjectId`
+   - If `mobile-app` and `www` are both under the same Linear team, create one webhook for that team and reuse it
+   - If another repo belongs to a different Linear team, create a second team-level webhook for that team, still pointing to the same `/linear-webhook` URL
    - If every project on this host shares one Linear board or webhook secret, copy it into the root `.env` as `LINEAR_WEBHOOK_SECRET`
    - If a repo needs its own override, add `LINEAR_WEBHOOK_SECRET` to `repos/<project-id>/.env`
 3. **GitHub webhook**:
@@ -250,7 +274,7 @@ curl https://<your-webhook-host>/health
 # 2. Scaffold local state
 ./scripts/add-project.sh <new-id>
 #    This resolves linearProjectName and writes linearProjectId back into projects.local.json
-# 3. Create the Linear webhook and the repo's GitHub pull_request webhook
+# 3. Make sure the team-level Linear webhook points to /linear-webhook and create the repo's GitHub pull_request webhook
 # 4. Reload
 pm2 restart solto
 ```

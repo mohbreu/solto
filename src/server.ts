@@ -29,7 +29,10 @@ import {
   savePullRequestState,
 } from "./pr-state.js";
 import { recoverPullRequestState } from "./pr-recovery.js";
-import { issueBelongsToProject } from "./project-routing.js";
+import {
+  findProjectByLinearProjectId,
+  issueBelongsToProject,
+} from "./project-routing.js";
 import { PROJECTS } from "./projects.js";
 import {
   listRecentJobStates,
@@ -353,6 +356,23 @@ function findProjectByRepo(fullName: string | undefined) {
   ) ?? null;
 }
 
+function verifyLinearWebhookForAnyProject(
+  signature: string | null,
+  rawBody: string
+): boolean {
+  const secrets = new Set(
+    Object.values(PROJECTS)
+      .map((project) => project.webhookSecret)
+      .filter(Boolean)
+  );
+  for (const secret of secrets) {
+    if (verifyLinearWebhook(signature, rawBody, secret)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const app = new Hono();
 
 const pools = new Map(
@@ -380,17 +400,8 @@ function checkLimits(projectId: string): string | null {
 
 app.get("/health", (c) => c.text("ok"));
 
-app.post("/webhook/:projectId", async (c) => {
-  const projectId = c.req.param("projectId");
-  const project = PROJECTS[projectId];
-
-  console.log(`[webhook] hit /webhook/${projectId}`);
-
-  if (!project) {
-    console.log(`[webhook] unknown project: ${projectId}`);
-    return c.text("Unknown project", 404);
-  }
-
+app.post("/linear-webhook", async (c) => {
+  console.log("[webhook] hit /linear-webhook");
   const contentLength = Number(c.req.header("content-length") ?? 0);
   if (contentLength > MAX_WEBHOOK_BODY_BYTES) {
     return c.text("Payload too large", 413);
@@ -402,8 +413,8 @@ app.post("/webhook/:projectId", async (c) => {
   }
   const signature = c.req.header("linear-signature") ?? null;
 
-  if (!verifyLinearWebhook(signature, raw, project.webhookSecret)) {
-    console.log(`[webhook] signature verification FAILED for ${projectId}`);
+  if (!verifyLinearWebhookForAnyProject(signature, raw)) {
+    console.log("[webhook] signature verification FAILED");
     return c.text("Unauthorized", 401);
   }
 
@@ -415,7 +426,7 @@ app.post("/webhook/:projectId", async (c) => {
     const labelNames = labels.map((l) => l.name);
     const issueFromWebhook = data as LinearIssue;
     console.log(
-      `[webhook] ${projectId} type=${webhookType} action=${action} issue=${data?.id} labels=[${labelNames.join(",")}]`
+      `[webhook] linear type=${webhookType} action=${action} issue=${data?.id} labels=[${labelNames.join(",")}]`
     );
 
     if (!issueIsValid(issueFromWebhook)) {
@@ -423,6 +434,26 @@ app.post("/webhook/:projectId", async (c) => {
         `[webhook] rejected malformed issue id/identifier: ${issueFromWebhook.id}/${issueFromWebhook.identifier}`
       );
       return c.text("Bad Request", 400);
+    }
+
+    const fetchedIssue = await getIssueById(issueFromWebhook.id).catch((err) => {
+      console.error(`[webhook] failed to fetch issue details for ${issueFromWebhook.id}:`, err);
+      return null;
+    });
+    if (!fetchedIssue) {
+      console.log(`[webhook] ignored (issue lookup failed for ${issueFromWebhook.id})`);
+      return c.text("OK");
+    }
+    const project = findProjectByLinearProjectId(
+      Object.values(PROJECTS),
+      fetchedIssue.projectId
+    );
+    const projectId = project?.id ?? "unmanaged";
+    if (!project) {
+      console.log(
+        `[webhook] ignored (no managed project for issue project ${fetchedIssue.projectId ?? "unknown"})`
+      );
+      return c.text("OK");
     }
 
     const { issue, reason, feedback } = await getAssignmentTriggerIssue(
@@ -456,9 +487,29 @@ app.post("/webhook/:projectId", async (c) => {
   if (webhookType === "Comment") {
     const comment = data as LinearComment;
     const issueId = comment.issueId;
+    const issue = await getIssueById(issueId).catch((err) => {
+      console.error(`[webhook] failed to fetch issue details for comment/${issueId}:`, err);
+      return null;
+    });
+    if (!issue) {
+      console.log(`[webhook] ignored comment (issue lookup failed for ${issueId})`);
+      return c.text("OK");
+    }
+    const project = findProjectByLinearProjectId(
+      Object.values(PROJECTS),
+      issue.projectId
+    );
+    const projectId = project?.id ?? "unmanaged";
     console.log(
       `[webhook] ${projectId} type=${webhookType} action=${action} issue=${issueId} comment=${comment.id}`
     );
+
+    if (!project) {
+      console.log(
+        `[webhook] ignored comment (no managed project for issue project ${issue.projectId ?? "unknown"})`
+      );
+      return c.text("OK");
+    }
 
     if (action !== "create") {
       console.log(`[webhook] ignored comment (action=${action})`);
@@ -483,14 +534,6 @@ app.post("/webhook/:projectId", async (c) => {
 
     let existingPr = await getPullRequestState(issueId);
     if (!existingPr) {
-      const issue = await getIssueById(issueId).catch((err) => {
-        console.error(`[webhook] failed to fetch issue details for ${projectId}/${issueId}:`, err);
-        return null;
-      });
-      if (!issue) {
-        console.log(`[webhook] ignored comment (issue lookup failed for ${issueId})`);
-        return c.text("OK");
-      }
       if (!issueBelongsToProject(project, issue.projectId)) {
         console.log(
           `[webhook] ignored comment (issue project mismatch: ${issue.projectId ?? "unknown"} != ${project.linearProjectId})`
@@ -527,14 +570,6 @@ app.post("/webhook/:projectId", async (c) => {
       return c.text("OK");
     }
 
-    const issue = await getIssueById(issueId).catch((err) => {
-      console.error(`[webhook] failed to fetch issue details for ${projectId}/${issueId}:`, err);
-      return null;
-    });
-    if (!issue) {
-      console.log(`[webhook] ignored comment (issue lookup failed for ${issueId})`);
-      return c.text("OK");
-    }
     if (!issueBelongsToProject(project, issue.projectId)) {
       console.log(
         `[webhook] ignored comment (issue project mismatch: ${issue.projectId ?? "unknown"} != ${project.linearProjectId})`
@@ -744,9 +779,7 @@ async function main(): Promise<void> {
 
   serve({ fetch: app.fetch, port: 3000 }, () => {
     console.log("solto running on :3000");
-    Object.keys(PROJECTS).forEach((id) => {
-      console.log(`  POST /webhook/${id}`);
-    });
+    console.log("  POST /linear-webhook");
     console.log("  POST /github-webhook");
     console.log("  GET  /status  (x-status-token header required)");
     console.log("  GET  /health");
